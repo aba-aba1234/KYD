@@ -1,0 +1,1223 @@
+# 🚀 PROMPT DEFINITIVO KYD — VERSIONE MANUS / REPLIT / BASE44
+
+```markdown
+Costruisci un sito web completo per KYD (Keep Your Dear ones safe),
+un marketplace italiano che connette famiglie con caregiver verificati
+per assistenza a bambini, animali e anziani.
+
+════════════════════════════════════════
+PIATTAFORMA DI BUILD
+════════════════════════════════════════
+
+Questo progetto viene costruito su Replit / Base44 / Manus.
+Usa quindi:
+- UN SOLO FILE SERVER se possibile (es. Express + React in monorepo)
+- Evita configurazioni complesse di build (no webpack custom)
+- Usa CDN per librerie pesanti dove possibile
+- Preferisci soluzioni semplici e funzionanti a soluzioni perfette
+- Il codice deve girare direttamente su Replit senza setup manuale
+- Usa variabili d'ambiente Replit (process.env.*)
+- Database: usa Replit DB (built-in) o JSON files per i dati
+- Real-time: usa Socket.io (funziona nativamente su Replit)
+- Porta default: process.env.PORT || 3000
+
+STRUTTURA CONSIGLIATA PER REPLIT:
+/
+├── server.js          (Express + Socket.io backend)
+├── package.json
+├── .env
+├── public/
+│   ├── index.html
+│   └── assets/
+└── src/
+    ├── pages/
+    ├── components/
+    └── data/
+        └── mockData.js
+
+SE USI REACT + VITE (Base44 style):
+/
+├── index.html
+├── vite.config.js
+├── package.json
+├── server.js          (Socket.io server separato)
+├── src/
+│   ├── main.jsx
+│   ├── App.jsx
+│   ├── pages/
+│   ├── components/
+│   ├── data/
+│   └── styles/
+
+════════════════════════════════════════
+STACK SEMPLIFICATO (compatibile Replit)
+════════════════════════════════════════
+
+FRONTEND:
+- React 18 (via Vite o CDN)
+- React Router DOM (routing lato client)
+- Tailwind CSS (via CDN o PostCSS)
+- Framer Motion (animazioni)
+- Lucide React (icone)
+
+MAPPE:
+- Leaflet.js (via CDN, no SSR problems)
+- React Leaflet (se React disponibile)
+
+CHAT REAL-TIME:
+- Socket.io (client + server)
+- Server Express su Replit
+- Persistenza messaggi: array in memoria o Replit DB
+
+FORM:
+- React Hook Form (leggero, no dipendenze)
+- Validazione manuale semplice (no Zod se troppo pesante)
+
+UI COMPONENTS:
+- Crea componenti custom semplici
+- NO shadcn/ui (richiede setup complesso)
+- Usa classi Tailwind direttamente
+
+NIENTE:
+- No Next.js (SSR complesso su Replit)
+- No TypeScript (usa JavaScript puro per semplicità)
+- No shadcn/ui (setup troppo complesso)
+- No build pipeline complessa
+
+════════════════════════════════════════
+COLORI (CSS variables in index.css)
+════════════════════════════════════════
+
+:root {
+  --primary: #3B82F6;
+  --primary-dark: #2563EB;
+  --primary-light: #EFF6FF;
+  --secondary: #10B981;
+  --secondary-light: #ECFDF5;
+  --accent: #F59E0B;
+  --danger: #EF4444;
+  --gray-50: #F9FAFB;
+  --gray-100: #F3F4F6;
+  --gray-600: #4B5563;
+  --gray-900: #111827;
+  --white: #FFFFFF;
+}
+
+════════════════════════════════════════
+PAGINE DA CREARE (React Router)
+════════════════════════════════════════
+
+App.jsx con React Router:
+<Routes>
+  <Route path="/" element={<Homepage />} />
+  <Route path="/come-funziona" element={<ComeFunziona />} />
+  <Route path="/famiglie" element={<Famiglie />} />
+  <Route path="/caregiver" element={<Caregiver />} />
+  <Route path="/sicurezza" element={<Sicurezza />} />
+  <Route path="/prezzi" element={<Prezzi />} />
+  <Route path="/chi-siamo" element={<ChiSiamo />} />
+  <Route path="/contatti" element={<Contatti />} />
+  <Route path="/ricerca" element={<Ricerca />} />
+  <Route path="/profilo/:id" element={<ProfiloCaregiver />} />
+  <Route path="/chat" element={<Chat />} />
+  <Route path="/prenota/:id" element={<Prenota />} />
+</Routes>
+
+════════════════════════════════════════
+PAGINA 1 — HOMEPAGE (/)
+════════════════════════════════════════
+
+SEZIONI IN ORDINE:
+
+1. NAVBAR
+   - Logo: icona scudo + "KYD" testo bold
+   - Links desktop: Come Funziona | Famiglie | Caregiver | Sicurezza | Prezzi
+   - Buttons: [Accedi] [Registrati gratis]
+   - Mobile: hamburger menu con drawer
+   - Sticky top, background bianco/90 + blur
+   - Shadow appare dopo 10px scroll
+
+2. HERO
+   - Background gradient: from #EFF6FF to white
+   - Badge: "✨ Più di 50.000 famiglie ci scelgono"
+   - H1: "Affida chi ami a chi si prende cura con il cuore"
+   - Sottotitolo: "Trova babysitter, pet-sitter e badanti verificati
+     in meno di 3 minuti."
+   - Search form card (bianco, shadow):
+     * Input zona (placeholder: "Milano, Roma...")
+     * Select: Oggi / Domani / Scegli data
+     * Select: Babysitter / Pet-sitter / Badante / Aiuto compiti
+     * Button blu "Cerca" → naviga a /ricerca
+   - Trust line: ⭐4.9/5 | 12.847 recensioni | 🛡️ Verificati
+   - App badges placeholder
+
+3. SERVIZI (3 card)
+   Card Baby Care:
+   - Icona 👶, titolo, descrizione, "Da €12/ora"
+   - Features: ✅ Verifica identità ✅ Primo soccorso ✅ Referenze
+   - Button "Trova babysitter →"
+   - Hover: lift -8px + shadow
+
+   Card Pet Care:
+   - Icona 🐾, "Da €10/ora"
+   - Features: ✅ Amanti animali verificati ✅ GPS tracking ✅ RC inclusa
+   - Button "Trova pet-sitter →"
+
+   Card Elder Care:
+   - Icona 👴, "Da €15/ora"
+   - Features: ✅ OSS certificati ✅ Background check ✅ Esperienza
+   - Button "Trova assistente →"
+
+4. COME FUNZIONA (3 step)
+   Step 1: 🔍 Cerca → "Inserisci zona, data, servizio"
+   Step 2: ⭐ Scegli → "Profili verificati con video e recensioni"
+   Step 3: ✅ Prenota → "Un click, pagamento sicuro, conferma immediata"
+   Frecce animate tra gli step
+
+5. PERCHÉ KYD (grid 2x2)
+   Card 1: 🛡️ Verifica a 5 livelli → "Solo 28% approvato"
+   Card 2: ⭐ Recensioni certificate → "12.847 recensioni, 4.9/5"
+   Card 3: 💳 Pagamento sicuro → "Stripe, PCI-DSS Level 1"
+   Card 4: 👁️ Trasparenza totale → "Foto, GPS, chat, report"
+   Hover: border-primary + scale 1.02
+
+6. RECENSIONI (carousel)
+   5 testimonianze con:
+   - 5 stelle gialle
+   - Commento corsivo
+   - Nome + ruolo + città
+   - Badge "✅ Recensione verificata"
+   Auto-scroll ogni 5s con dots navigation
+
+7. STATS (dark background #111827)
+   8 counter animati da 0:
+   50.000+ Famiglie | 8.500+ Caregiver | 12.847 Recensioni |
+   98% Successo | 15 Città | €4.2M Distribuiti | 15min Risposta |
+   5.000 Alberi
+   Animazione counter inizia quando sezione è visibile
+
+8. CTA FINALE
+   Background gradient blu
+   H2: "Pronto a vivere più sereno?"
+   Button bianco: "Trova un caregiver" → /ricerca
+   Button outline bianco: "Diventa caregiver" → /caregiver
+   Trust line: ✓ Gratis ✓ Nessuna carta ✓ Cancellazione libera
+
+9. FOOTER
+   4 colonne: Brand+social | Per famiglie | Per caregiver | Azienda
+   Bottom: copyright + privacy + termini
+
+════════════════════════════════════════
+PAGINA 2 — RICERCA (/ricerca) ⭐ MAPPA
+════════════════════════════════════════
+
+LAYOUT SPLIT (flexbox):
+- Sinistra (35%): filtri + lista risultati scrollabile
+- Destra (65%): mappa Leaflet fullscreen
+
+SIDEBAR SINISTRA:
+
+Filtri:
+- Select "Servizio": tutti / baby / pet / elder
+- Input "Zona": testo libero (filtra per città)
+- Range slider "Budget": €10 - €30/h
+  * <input type="range"> styled con Tailwind
+  * Mostra valore live: "Max €{valore}/h"
+- Toggle "Solo disponibili ora"
+- Button "Applica filtri"
+
+Lista risultati:
+- Scroll indipendente dalla mappa
+- Ogni card caregiver:
+  * Avatar (circle, placeholder colorato con iniziali)
+  * Nome + città
+  * Rating stelle + numero recensioni
+  * Badge servizi (baby/pet/elder)
+  * Prezzo "€X/h"
+  * Badge "● Disponibile" (verde) o "○ Occupato" (grigio)
+  * Button "Vedi profilo" → /profilo/:id
+  * Button "Chatta" → /chat?user=family&room=:id
+- Hover card → evidenzia marker sulla mappa
+- Empty state: "Nessun caregiver trovato in questa zona"
+
+MAPPA LEAFLET (destra):
+
+Setup base:
+```javascript
+// Usa Leaflet via CDN in index.html:
+// <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+// <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+// O con react-leaflet:
+import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet'
+
+// Dynamic import per evitare SSR issues:
+// In Replit con Vite non c'è SSR, quindi import normale va bene
+```
+
+Configurazione mappa:
+- Centro Italia: [41.9028, 12.4964]
+- Zoom iniziale: 6
+- Tile layer: OpenStreetMap (gratuito)
+  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+
+Marker per ogni caregiver:
+- Pin colorato (blu = baby, verde = pet, arancione = elder)
+- Click marker → Popup con:
+  * Foto/avatar caregiver
+  * Nome + rating
+  * Servizio offerto
+  * Prezzo orario
+  * Button "Vedi profilo"
+  * Button "Chatta ora" → /chat
+
+Interazione mappa ↔ lista:
+- Hover su card lista → marker diventa più grande (bounce)
+- Click su marker → scroll lista alla card corrispondente
+
+════════════════════════════════════════
+PAGINA 3 — PROFILO CAREGIVER (/profilo/:id)
+════════════════════════════════════════
+
+USA useParams per ottenere id
+Filtra mockData.caregivers per trovare il caregiver
+
+LAYOUT:
+- Colonna principale (65%) + Sidebar sticky (35%)
+
+COLONNA PRINCIPALE:
+
+1. Header profilo:
+   - Avatar grande (120px circle)
+   - Nome + badge "✅ Verificato"
+   - Stelle rating + numero recensioni
+   - Badge servizi colorati
+   - Città + raggio operativo
+
+2. Video placeholder:
+   - Box con icona play
+   - Testo: "Video di presentazione"
+   - Background grigio, rounded-xl
+
+3. Bio:
+   - Titolo "Chi sono"
+   - Testo bio del caregiver
+
+4. MAPPA ZONA OPERATIVA ⭐:
+   Titolo: "📍 Zona operativa"
+
+   Implementazione con Leaflet:
+   ```javascript
+   // Component ZonaMap.jsx
+   import { MapContainer, TileLayer, Circle, Marker, Tooltip } from 'react-leaflet'
+
+   function ZonaMap({ caregiver }) {
+     const center = [caregiver.lat, caregiver.lng]
+     const radiusMeters = caregiver.radius * 1000
+
+     return (
+       <MapContainer
+         center={center}
+         zoom={11}
+         style={{ height: '300px', borderRadius: '12px' }}
+       >
+         <TileLayer
+           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+         />
+         <Circle
+           center={center}
+           radius={radiusMeters}
+           pathOptions={{
+             fillColor: '#3B82F6',
+             fillOpacity: 0.15,
+             color: '#3B82F6',
+             weight: 2
+           }}
+         />
+         <Marker position={center}>
+           <Tooltip permanent>
+             📍 {caregiver.name} · Copro {caregiver.city} entro {caregiver.radius}km
+           </Tooltip>
+         </Marker>
+       </MapContainer>
+     )
+   }
+   ```
+
+   NOTA IMPORTANTE PER LEAFLET SU REPLIT:
+   Aggiungi in index.html:
+   ```html
+   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+   ```
+   E in vite.config.js (se necessario):
+   ```javascript
+   optimizeDeps: { exclude: ['leaflet'] }
+   ```
+
+5. Disponibilità:
+   - Griglia giorni settimana
+   - Slot orari colorati (verde = libero, grigio = occupato)
+
+6. Certificazioni:
+   - Badge con icona per ognuna
+   - Tooltip con descrizione
+
+7. Recensioni:
+   - Lista ultime 5 recensioni
+   - Stelle + nome autore + data + commento
+   - Badge "✅ Verificata"
+
+SIDEBAR STICKY (destra):
+   - Prezzo: "€X/ora"
+   - Commissione: "+ 5% (€Y)"
+   - Totale stimato per 3h: "€Z"
+   - Disponibilità: badge verde/rosso
+   - Button primario BIG: "💬 Chatta con [nome]"
+     onClick → naviga a /chat?room=[id]&user=family
+   - Button secondario: "📅 Prenota ora"
+     onClick → naviga a /prenota/[id]
+   - Garanzie: ✅ Verificato ✅ Assicurato ✅ Pagamento sicuro
+
+════════════════════════════════════════
+PAGINA 4 — CHAT REAL-TIME (/chat) ⭐ PEZZO FORTE
+════════════════════════════════════════
+
+QUESTA È LA FEATURE PIÙ IMPORTANTE.
+Deve funzionare DAVVERO in real-time tra due browser.
+
+BACKEND (server.js su Replit):
+
+```javascript
+const express = require('express')
+const http = require('http')
+const { Server } = require('socket.io')
+const path = require('path')
+
+const app = express()
+const server = http.createServer(app)
+const io = new Server(server, {
+  cors: { origin: '*' }
+})
+
+// Memorizza messaggi per ogni room (in memoria per demo)
+const rooms = {}
+
+io.on('connection', (socket) => {
+  console.log('Utente connesso:', socket.id)
+
+  // Utente entra in una room
+  socket.on('join-room', ({ roomId, userId, userName }) => {
+    socket.join(roomId)
+    socket.userId = userId
+    socket.userName = userName
+    socket.roomId = roomId
+
+    // Manda storico messaggi all'utente che si connette
+    if (rooms[roomId]) {
+      socket.emit('message-history', rooms[roomId])
+    }
+
+    // Avvisa gli altri che l'utente è entrato
+    socket.to(roomId).emit('user-joined', {
+      userId,
+      userName,
+      timestamp: Date.now()
+    })
+  })
+
+  // Utente manda messaggio
+  socket.on('send-message', ({ roomId, userId, userName, text }) => {
+    const message = {
+      id: Date.now(),
+      userId,
+      userName,
+      text,
+      timestamp: Date.now()
+    }
+
+    // Salva in memoria
+    if (!rooms[roomId]) rooms[roomId] = []
+    rooms[roomId].push(message)
+
+    // Manda a TUTTI nella room (incluso mittente)
+    io.to(roomId).emit('receive-message', message)
+  })
+
+  // Utente sta scrivendo
+  socket.on('typing', ({ roomId, userId, userName }) => {
+    socket.to(roomId).emit('user-typing', { userId, userName })
+  })
+
+  // Utente smette di scrivere
+  socket.on('stop-typing', ({ roomId, userId }) => {
+    socket.to(roomId).emit('user-stop-typing', { userId })
+  })
+
+  // Disconnessione
+  socket.on('disconnect', () => {
+    if (socket.roomId) {
+      socket.to(socket.roomId).emit('user-left', {
+        userId: socket.userId,
+        userName: socket.userName
+      })
+    }
+    console.log('Utente disconnesso:', socket.id)
+  })
+})
+
+// Servi frontend
+app.use(express.static(path.join(__dirname, 'dist')))
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'))
+})
+
+const PORT = process.env.PORT || 3000
+server.listen(PORT, () => {
+  console.log(`KYD Server running on port ${PORT}`)
+})
+```
+
+FRONTEND CHAT (Chat.jsx):
+
+```javascript
+import { useState, useEffect, useRef } from 'react'
+import { io } from 'socket.io-client'
+import { useSearchParams } from 'react-router-dom'
+
+// Connetti al server Socket.io
+const socket = io(window.location.origin)
+
+// Dati demo utenti
+const DEMO_USERS = {
+  family: {
+    userId: 'user-famiglia-demo',
+    userName: 'Marco (Famiglia)',
+    avatar: '👨‍👩‍👧',
+    color: '#3B82F6'
+  },
+  caregiver: {
+    userId: 'user-sara-demo',
+    userName: 'Sara M. (Caregiver)',
+    avatar: '👩‍⚕️',
+    color: '#10B981'
+  }
+}
+
+export default function Chat() {
+  const [searchParams] = useSearchParams()
+  const userType = searchParams.get('user') || 'family'
+  const roomId = searchParams.get('room') || 'demo-room'
+  const currentUser = DEMO_USERS[userType]
+
+  const [messages, setMessages] = useState([])
+  const [input, setInput] = useState('')
+  const [isTyping, setIsTyping] = useState(false)
+  const [typingUser, setTypingUser] = useState('')
+  const [isOnline, setIsOnline] = useState(false)
+  const messagesEndRef = useRef(null)
+  const typingTimeout = useRef(null)
+
+  useEffect(() => {
+    // Entra nella room
+    socket.emit('join-room', {
+      roomId,
+      userId: currentUser.userId,
+      userName: currentUser.userName
+    })
+
+    // Ricevi storico messaggi
+    socket.on('message-history', (history) => {
+      setMessages(history)
+    })
+
+    // Ricevi nuovo messaggio
+    socket.on('receive-message', (message) => {
+      setMessages(prev => [...prev, message])
+    })
+
+    // Altro utente sta scrivendo
+    socket.on('user-typing', ({ userName }) => {
+      if (userName !== currentUser.userName) {
+        setTypingUser(userName)
+        setIsTyping(true)
+      }
+    })
+
+    socket.on('user-stop-typing', () => {
+      setIsTyping(false)
+      setTypingUser('')
+    })
+
+    // Altro utente si connette
+    socket.on('user-joined', ({ userName }) => {
+      setIsOnline(true)
+    })
+
+    socket.on('user-left', () => {
+      setIsOnline(false)
+    })
+
+    return () => {
+      socket.off('message-history')
+      socket.off('receive-message')
+      socket.off('user-typing')
+      socket.off('user-stop-typing')
+      socket.off('user-joined')
+      socket.off('user-left')
+    }
+  }, [roomId, currentUser])
+
+  // Auto-scroll al fondo
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const sendMessage = () => {
+    if (!input.trim()) return
+
+    socket.emit('send-message', {
+      roomId,
+      userId: currentUser.userId,
+      userName: currentUser.userName,
+      text: input.trim()
+    })
+
+    socket.emit('stop-typing', {
+      roomId,
+      userId: currentUser.userId
+    })
+
+    setInput('')
+  }
+
+  const handleInputChange = (e) => {
+    setInput(e.target.value)
+
+    // Emetti typing
+    socket.emit('typing', {
+      roomId,
+      userId: currentUser.userId,
+      userName: currentUser.userName
+    })
+
+    // Stop typing dopo 2s di inattività
+    clearTimeout(typingTimeout.current)
+    typingTimeout.current = setTimeout(() => {
+      socket.emit('stop-typing', {
+        roomId,
+        userId: currentUser.userId
+      })
+    }, 2000)
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      sendMessage()
+    }
+  }
+
+  const formatTime = (timestamp) => {
+    return new Date(timestamp).toLocaleTimeString('it-IT', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const isMyMessage = (msg) => msg.userId === currentUser.userId
+
+  return (
+    <div className="flex h-screen bg-gray-100">
+
+      {/* SIDEBAR CONVERSAZIONI */}
+      <div className="w-80 bg-white border-r flex flex-col">
+        <div className="p-4 border-b bg-primary text-white">
+          <h2 className="font-bold text-lg">💬 Messaggi</h2>
+          <p className="text-sm opacity-80">KYD Chat</p>
+        </div>
+
+        {/* Info utente corrente */}
+        <div className="p-4 bg-primary-light border-b">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">{currentUser.avatar}</span>
+            <div>
+              <div className="font-semibold text-sm">{currentUser.userName}</div>
+              <div className="text-xs text-gray-500">
+                {userType === 'family' ? '👨‍👩‍👧 Famiglia' : '🏅 Caregiver'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Lista conversazioni (demo) */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-3 bg-blue-50 border-l-4 border-primary cursor-pointer">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">
+                {userType === 'family' ? '👩‍⚕️' : '👨‍👩‍👧'}
+              </span>
+              <div className="flex-1">
+                <div className="font-semibold text-sm">
+                  {userType === 'family' ? 'Sara M.' : 'Marco (Famiglia)'}
+                </div>
+                <div className="text-xs text-gray-500 truncate">
+                  {messages.length > 0
+                    ? messages[messages.length - 1].text
+                    : 'Inizia una conversazione...'}
+                </div>
+              </div>
+              {isOnline && (
+                <div className="w-3 h-3 bg-green-500 rounded-full" />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Demo info box */}
+        <div className="p-3 bg-yellow-50 border-t border-yellow-200">
+          <p className="text-xs text-yellow-800 font-medium">
+            🎓 DEMO MODE
+          </p>
+          <p className="text-xs text-yellow-700 mt-1">
+            Apri un altro browser con:
+          </p>
+          <code className="text-xs bg-yellow-100 px-1 rounded block mt-1">
+            /chat?user={userType === 'family' ? 'caregiver' : 'family'}&room={roomId}
+          </code>
+        </div>
+      </div>
+
+      {/* FINESTRA CHAT PRINCIPALE */}
+      <div className="flex-1 flex flex-col">
+
+        {/* Header chat */}
+        <div className="bg-white border-b p-4 flex items-center gap-3 shadow-sm">
+          <span className="text-3xl">
+            {userType === 'family' ? '👩‍⚕️' : '👨‍👩‍👧'}
+          </span>
+          <div>
+            <div className="font-semibold">
+              {userType === 'family' ? 'Sara M. — Babysitter' : 'Marco — Famiglia'}
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              {isOnline ? (
+                <>
+                  <div className="w-2 h-2 bg-green-500 rounded-full" />
+                  <span className="text-green-600">Online</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full" />
+                  <span className="text-gray-500">Offline — apri secondo browser</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Area messaggi */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {messages.length === 0 && (
+            <div className="text-center text-gray-400 mt-20">
+              <div className="text-5xl mb-4">💬</div>
+              <p className="font-medium">Nessun messaggio ancora</p>
+              <p className="text-sm mt-2">Inizia la conversazione!</p>
+            </div>
+          )}
+
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`flex ${isMyMessage(msg) ? 'justify-end' : 'justify-start'}`}
+            >
+              {/* Avatar (solo messaggi altrui) */}
+              {!isMyMessage(msg) && (
+                <span className="text-2xl mr-2 self-end">
+                  {userType === 'family' ? '👩‍⚕️' : '👨‍👩‍👧'}
+                </span>
+              )}
+
+              <div className={`max-w-xs lg:max-w-md ${isMyMessage(msg) ? 'items-end' : 'items-start'} flex flex-col`}>
+                {/* Nome mittente */}
+                {!isMyMessage(msg) && (
+                  <span className="text-xs text-gray-500 mb-1 ml-1">
+                    {msg.userName}
+                  </span>
+                )}
+
+                {/* Bubble messaggio */}
+                <div className={`px-4 py-2 rounded-2xl ${
+                  isMyMessage(msg)
+                    ? 'bg-primary text-white rounded-br-sm'
+                    : 'bg-white text-gray-900 rounded-bl-sm shadow-sm border'
+                }`}>
+                  <p className="text-sm leading-relaxed">{msg.text}</p>
+                  <p className={`text-xs mt-1 ${
+                    isMyMessage(msg) ? 'text-blue-100' : 'text-gray-400'
+                  }`}>
+                    {formatTime(msg.timestamp)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Indicatore "sta scrivendo" */}
+          {isTyping && (
+            <div className="flex items-center gap-2 text-gray-500">
+              <span className="text-xl">
+                {userType === 'family' ? '👩‍⚕️' : '👨‍👩‍👧'}
+              </span>
+              <div className="bg-white rounded-2xl px-4 py-2 shadow-sm border">
+                <div className="flex gap-1 items-center">
+                  <span className="text-xs text-gray-500 mr-2">
+                    {typingUser} sta scrivendo
+                  </span>
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay:'0ms'}} />
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay:'150ms'}} />
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay:'300ms'}} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input area */}
+        <div className="bg-white border-t p-4">
+          <div className="flex gap-3 items-end">
+            <textarea
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Scrivi un messaggio... (Invio per inviare)"
+              rows={1}
+              className="flex-1 resize-none border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 max-h-32"
+              style={{ minHeight: '48px' }}
+            />
+            <button
+              onClick={sendMessage}
+              disabled={!input.trim()}
+              className="bg-primary hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl px-4 py-3 transition-colors"
+            >
+              ✈️
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Invio = manda · Shift+Invio = nuova riga
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+ISTRUZIONI DEMO CHAT (per presentazione al prof):
+```
+COME DIMOSTRARE LA CHAT LIVE:
+
+1. Apri il sito sul browser 1:
+   URL: /chat?user=family&room=demo-room
+   → Sei "Marco (Famiglia)"
+
+2. Apri il STESSO sito sul browser 2 (o finestra privata):
+   URL: /chat?user=caregiver&room=demo-room
+   → Sei "Sara M. (Caregiver)"
+
+3. Scrivi dal browser 1: "Ciao Sara, sei disponibile domani?"
+   → APPARE ISTANTANEAMENTE nel browser 2 ✅
+
+4. Rispondi dal browser 2: "Ciao! Sì, sono libera dalle 14!"
+   → APPARE ISTANTANEAMENTE nel browser 1 ✅
+
+5. Inizia a scrivere senza inviare:
+   → L'altro browser mostra "Sara sta scrivendo..." con i 3 puntini ✅
+
+QUESTO È WEBSOCKET REAL-TIME. WOW EFFECT GARANTITO! 🎉
+```
+
+════════════════════════════════════════
+DATI MOCKUP (/src/data/mockData.js)
+════════════════════════════════════════
+
+```javascript
+export const caregivers = [
+  {
+    id: '1',
+    name: 'Sara M.',
+    age: 24,
+    city: 'Milano',
+    lat: 45.4642,
+    lng: 9.1900,
+    radius: 10,
+    rating: 4.9,
+    reviewCount: 127,
+    hourlyRate: 15,
+    services: ['baby'],
+    verified: true,
+    available: true,
+    certifications: ['Primo Soccorso Pediatrico', 'HACCP'],
+    bio: 'Studentessa di Scienze dell\'Educazione con 3 anni di esperienza con bambini 0-10 anni. Certificata primo soccorso pediatrico. Paziente, creativa e affidabile.',
+    languages: ['Italiano', 'Inglese'],
+    videoUrl: null,
+    reviews: [
+      { id:'r1', author:'Claudia M.', rating:5, date:'2024-12-15',
+        comment:'Sara è meravigliosa! Mio figlio la adora.', verified:true },
+      { id:'r2', author:'Francesca L.', rating:5, date:'2024-11-20',
+        comment:'Puntuale, professionale e molto affettuosa.', verified:true }
+    ]
+  },
+  {
+    id: '2',
+    name: 'Luca P.',
+    age: 30,
+    city: 'Roma',
+    lat: 41.9028,
+    lng: 12.4964,
+    radius: 8,
+    rating: 4.8,
+    reviewCount: 89,
+    hourlyRate: 12,
+    services: ['pet'],
+    verified: true,
+    available: true,
+    certifications: ['Pet First Aid'],
+    bio: 'Dog walker e pet-sitter full-time. Amo tutti gli animali. Esperienza con cani di tutte le taglie e caratteri.',
+    languages: ['Italiano'],
+    videoUrl: null,
+    reviews: [
+      { id:'r3', author:'Marco T.', rating:5, date:'2024-12-01',
+        comment:'Il mio golden retriever era felicissimo!', verified:true }
+    ]
+  },
+  {
+    id: '3',
+    name: 'Maria G.',
+    age: 45,
+    city: 'Torino',
+    lat: 45.0703,
+    lng: 7.6869,
+    radius: 12,
+    rating: 5.0,
+    reviewCount: 203,
+    hourlyRate: 18,
+    services: ['elder'],
+    verified: true,
+    available: false,
+    certifications: ['OSS', 'Primo Soccorso'],
+    bio: 'OSS certificata con 10 anni di esperienza nell\'assistenza anziani. Specializzata in pazienti con Alzheimer e demenze.',
+    languages: ['Italiano', 'Spagnolo'],
+    videoUrl: null,
+    reviews: [
+      { id:'r4', author:'Giulia F.', rating:5, date:'2024-12-10',
+        comment:'Assistenza eccellente per mia madre. Grazie Maria!', verified:true }
+    ]
+  },
+  {
+    id: '4',
+    name: 'Anna R.',
+    age: 28,
+    city: 'Bologna',
+    lat: 44.4949,
+    lng: 11.3426,
+    radius: 7,
+    rating: 4.9,
+    reviewCount: 56,
+    hourlyRate: 14,
+    services: ['baby', 'pet'],
+    verified: true,
+    available: true,
+    certifications: ['Primo Soccorso'],
+    bio: 'Babysitter e pet-sitter con doppia specializzazione. Perfetta per famiglie con bambini E animali!',
+    languages: ['Italiano', 'Francese'],
+    videoUrl: null,
+    reviews: []
+  },
+  {
+    id: '5',
+    name: 'Marco B.',
+    age: 35,
+    city: 'Firenze',
+    lat: 43.7696,
+    lng: 11.2558,
+    radius: 15,
+    rating: 4.7,
+    reviewCount: 34,
+    hourlyRate: 13,
+    services: ['pet'],
+    verified: true,
+    available: true,
+    certifications: ['Pet First Aid'],
+    bio: 'Amante dei cani da sempre. 5 anni di esperienza come dog walker a Firenze.',
+    languages: ['Italiano', 'Inglese'],
+    videoUrl: null,
+    reviews: []
+  },
+  {
+    id: '6',
+    name: 'Elena V.',
+    age: 22,
+    city: 'Napoli',
+    lat: 40.8518,
+    lng: 14.2681,
+    radius: 6,
+    rating: 4.6,
+    reviewCount: 18,
+    hourlyRate: 11,
+    services: ['baby'],
+    verified: true,
+    available: true,
+    certifications: ['Primo Soccorso'],
+    bio: 'Studentessa universitaria, babysitter dal 2021. Creativa e paziente.',
+    languages: ['Italiano'],
+    videoUrl: null,
+    reviews: []
+  }
+]
+
+export const testimonials = [
+  { id:1, rating:5, author:'Claudia M.', role:'Mamma di Tommaso, 4 anni · Milano',
+    comment:'Ho trovato Sara in 10 minuti. Il video di presentazione mi ha fatta sentire subito al sicuro. Mio figlio la adora.', verified:true },
+  { id:2, rating:5, author:'Marco T.', role:'Proprietario di Rocky · Roma',
+    comment:'Finalmente posso viaggiare senza sensi di colpa. Il pet-sitter mandava foto di Rocky ogni giorno.', verified:true },
+  { id:3, rating:5, author:'Giulia F.', role:'Figlia di paziente anziana · Torino',
+    comment:'Ho trovato un\'assistente OSS certificata per mia madre. KYD mi ha tolto ansia e incertezza.', verified:true },
+  { id:4, rating:5, author:'Laura P.', role:'Mamma di Emma e Sofia · Firenze',
+    comment:'Check-in, chat e report in tempo reale. Sai sempre cosa sta succedendo. Tranquillità assoluta.', verified:true },
+  { id:5, rating:5, author:'Davide S.', role:'Proprietario di Milo · Bologna',
+    comment:'Ho usato Instant Booking last minute. In 15 minuti avevo conferma. Incredibile.', verified:true }
+]
+
+export const stats = [
+  { id:1, value:50000, suffix:'+', label:'Famiglie registrate', desc:'Si fidano di KYD' },
+  { id:2, value:8500, suffix:'+', label:'Caregiver verificati', desc:'Professionisti certificati' },
+  { id:3, value:12847, suffix:'', label:'Recensioni certificate', desc:'Media 4.9/5' },
+  { id:4, value:98, suffix:'%', label:'Servizi completati', desc:'Con successo' },
+  { id:5, value:15, suffix:'', label:'Città italiane', desc:'In espansione' },
+  { id:6, value:4.2, prefix:'€', suffix:'M', label:'Distribuiti ai caregiver', desc:'Solo nel 2024' },
+  { id:7, value:15, suffix:' min', label:'Tempo medio risposta', desc:'Per urgenze' },
+  { id:8, value:5000, suffix:'', label:'Alberi piantati', desc:'1 ogni 10 servizi' }
+]
+```
+
+════════════════════════════════════════
+COMPONENTI DA CREARE (/src/components)
+════════════════════════════════════════
+
+Navbar.jsx
+  - Logo + links + buttons + mobile hamburger
+  - State: menuOpen (boolean)
+  - useEffect scroll detection per shadow
+
+Footer.jsx
+  - 4 colonne + bottom bar
+  - Links alle pagine
+
+ServiceCard.jsx
+  - Props: icon, title, desc, price, features[], ctaLink
+  - Hover lift effect con CSS transition
+
+TestimonialCard.jsx
+  - Props: rating, comment, author, role, verified
+  - Stelle renderizzate in loop
+
+FeatureCard.jsx
+  - Props: icon, title, desc, badge, link
+  - Border-2 hover:border-primary
+
+StatCounter.jsx
+  - Props: value, prefix, suffix, label, desc
+  - Intersection Observer per trigger animazione
+  - setInterval per counter 0 → value in 2s
+
+CaregiverCard.jsx
+  - Props: caregiver object
+  - Avatar con iniziali, rating, badges, buttons
+
+ZonaMap.jsx
+  - Props: caregiver object
+  - React Leaflet con Circle + Marker + Tooltip
+  - IMPORTANTE: usa dynamic import o controlla window
+
+Carousel.jsx
+  - Props: items[], autoplay (ms)
+  - State: currentIndex
+  - setInterval per autoplay
+  - Dots navigation
+
+RangeSlider.jsx
+  - Props: min, max, value, onChange, label
+  - Input type="range" styled
+  - Mostra valore live
+
+════════════════════════════════════════
+PACKAGE.JSON (compatibile Replit)
+════════════════════════════════════════
+
+```json
+{
+  "name": "kyd-marketplace",
+  "version": "1.0.0",
+  "description": "KYD - Keep Your Dear ones safe",
+  "scripts": {
+    "dev": "concurrently \"node server.js\" \"vite\"",
+    "build": "vite build",
+    "start": "node server.js",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "socket.io-client": "^4.7.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.21.0",
+    "react-leaflet": "^4.2.1",
+    "leaflet": "^1.9.4",
+    "framer-motion": "^10.16.0",
+    "lucide-react": "^0.303.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.8",
+    "tailwindcss": "^3.4.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "concurrently": "^8.2.2"
+  }
+}
+```
+
+════════════════════════════════════════
+VITE CONFIG (compatibile Replit)
+════════════════════════════════════════
+
+```javascript
+// vite.config.js
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+    proxy: {
+      '/socket.io': {
+        target: 'http://localhost:3000',
+        ws: true
+      }
+    }
+  },
+  optimizeDeps: {
+    exclude: ['leaflet']
+  }
+})
+```
+
+════════════════════════════════════════
+RESPONSIVE (mobile-first)
+════════════════════════════════════════
+
+Usa classi Tailwind:
+- Mobile default (< 640px)
+- sm: 640px+
+- md: 768px+
+- lg: 1024px+
+
+Pattern responsive:
+- Grid: grid-cols-1 md:grid-cols-2 lg:grid-cols-3
+- Flex: flex-col md:flex-row
+- Text: text-3xl md:text-5xl
+- Padding: p-4 md:p-8
+- Hidden/show: hidden md:block / block md:hidden
+
+BREAKPOINTS CHAT:
+- Mobile: sidebar nascosta, solo chat
+- Desktop: sidebar + chat affiancati
+
+BREAKPOINTS RICERCA:
+- Mobile: filtri sopra, mappa sotto (stack)
+- Desktop: sidebar sinistra + mappa destra
+
+════════════════════════════════════════
+ISTRUZIONI FINALI PER REPLIT
+════════════════════════════════════════
+
+1. Crea un file .replit con:
+   run = "npm run dev"
+   language = "nodejs"
+
+2. Il server Socket.io gira su porta 3000
+   Il client Vite gira su porta 5173
+   Usa "concurrently" per avviarli insieme
+
+3. Per la mappa Leaflet:
+   Aggiungi il CSS in index.html:
+   <link rel="stylesheet"
+     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+   NON importare leaflet CSS da JS (causa warnings)
+
+4. Per Socket.io su Replit:
+   Il client si connette a window.location.origin
+   Replit gestisce automaticamente il proxy WebSocket
+
+5. Variabili d'ambiente (.env):
+   PORT=3000
+   VITE_SOCKET_URL=http://localhost:3000
+
+════════════════════════════════════════
+OUTPUT RICHIESTO
+════════════════════════════════════════
+
+Genera in ordine:
+
+1. package.json
+2. .replit config
+3. vite.config.js
+4. tailwind.config.js
+5. index.html (con Leaflet CSS)
+6. server.js (Express + Socket.io completo)
+7. src/main.jsx
+8. src/App.jsx (Router + Routes)
+9. src/data/mockData.js
+10. src/components/ (tutti i componenti)
+11. src/pages/ (tutte le pagine)
+12. src/index.css (Tailwind + variabili CSS)
+
+PRIORITÀ ASSOLUTA:
+✅ Chat real-time FUNZIONANTE (Socket.io)
+✅ Mappa con zona operativa FUNZIONANTE (Leaflet)
+✅ Homepage completa e bella
+✅ Responsive mobile
+✅ Zero errori console
+✅ Funziona su Replit senza setup manuale
+
+Il sito deve sembrare una vera startup milionaria.
+Ogni dettaglio conta. Costruiscilo per impressionare.
+```
+
+---
+
+## 🎯 DOVE INCOLLARE QUESTO PROMPT
+
+| Piattaforma | Come usarlo |
+|-------------|-------------|
+| **Manus** | Incolla direttamente nella chat, genera tutto |
+| **Replit AI** | Apri Replit → New Repl → AI tab → incolla |
+| **Base44** | New project → AI Generate → incolla |
+
+## ⚡ DOPO LA GENERAZIONE
+
+```bash
+# Su Replit, nel terminale:
+npm install
+npm run dev
+
+# Poi apri 2 tab del browser con:
+# Tab 1: https://tuo-repl.repl.co/chat?user=family&room=demo-room
+# Tab 2: https://tuo-repl.repl.co/chat?user=caregiver&room=demo-room
+# Chatta tra i due browser → WOW EFFECT! 🎉
+```
