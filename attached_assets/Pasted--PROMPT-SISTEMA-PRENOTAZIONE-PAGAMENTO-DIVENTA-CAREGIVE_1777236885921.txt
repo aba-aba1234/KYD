@@ -1,0 +1,2530 @@
+# 🔧 PROMPT — SISTEMA PRENOTAZIONE + PAGAMENTO & DIVENTA CAREGIVER
+
+```markdown
+Devi implementare due nuove funzionalità complete nel sito KYD già esistente:
+
+1. SISTEMA PRENOTAZIONE + PAGAMENTO realistico con commissione KYD
+2. FLUSSO "DIVENTA CAREGIVER" che aggiunge davvero il profilo al sito
+
+════════════════════════════════════════
+MODIFICA 1 — SISTEMA PRENOTAZIONE E PAGAMENTO
+════════════════════════════════════════
+
+FLUSSO COMPLETO:
+ProfiloCaregiver → Prenota → Riepilogo → Pagamento → Conferma
+
+Il flusso deve essere in 4 STEP con progress bar visibile:
+Step 1: Dettagli prenotazione (data, orario, ore, note)
+Step 2: Riepilogo ordine con commissione KYD
+Step 3: Pagamento (form carta credito realistico)
+Step 4: Conferma con numero prenotazione
+
+════════════════════════════════════════
+FILE: src/pages/Prenota.jsx
+════════════════════════════════════════
+
+```javascript
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { caregivers } from '../data/mockData'
+
+// Commissione KYD: 15% sul totale
+const KYD_COMMISSION_RATE = 0.15
+
+// Genera numero prenotazione univoco
+const generateBookingId = () => {
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const nums = Math.floor(Math.random() * 90000) + 10000
+  const lets = letters[Math.floor(Math.random() * letters.length)] +
+               letters[Math.floor(Math.random() * letters.length)]
+  return `KYD-${lets}${nums}`
+}
+
+// Salva prenotazione in localStorage
+const saveBooking = (booking) => {
+  const existing = JSON.parse(localStorage.getItem('kyd_bookings') || '[]')
+  existing.push(booking)
+  localStorage.setItem('kyd_bookings', JSON.stringify(existing))
+}
+
+export default function Prenota() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const { user } = useAuth()
+
+  const caregiver = caregivers.find(c => c.id === id)
+
+  const [step, setStep] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [bookingId, setBookingId] = useState('')
+
+  // STEP 1 — Dati prenotazione
+  const [booking, setBooking] = useState({
+    date: '',
+    startTime: '',
+    hours: 2,
+    serviceType: caregiver?.services[0] || 'baby',
+    notes: '',
+    address: ''
+  })
+
+  // STEP 3 — Dati pagamento
+  const [payment, setPayment] = useState({
+    cardNumber: '',
+    cardName: '',
+    expiry: '',
+    cvv: '',
+    saveCard: false
+  })
+
+  const [errors, setErrors] = useState({})
+
+  // Calcoli prezzi
+  const subtotal = caregiver
+    ? caregiver.hourlyRate * booking.hours
+    : 0
+  const kydCommission = Math.round(subtotal * KYD_COMMISSION_RATE * 100) / 100
+  const kydCommissionDisplay = kydCommission.toFixed(2)
+  const total = (subtotal + kydCommission).toFixed(2)
+
+  // Redirect se non loggato
+  useEffect(() => {
+    if (!user) {
+      navigate('/login')
+    }
+  }, [user, navigate])
+
+  // Caregiver non trovato
+  if (!caregiver) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <span className="text-6xl">😕</span>
+          <p className="mt-4 text-gray-600">Caregiver non trovato</p>
+          <Link to="/ricerca"
+                className="mt-4 inline-block text-blue-600 hover:underline">
+            Torna alla ricerca
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  // ─── VALIDAZIONI ────────────────────────────────────────
+  const validateStep1 = () => {
+    const e = {}
+    if (!booking.date) e.date = 'Seleziona una data'
+    if (!booking.startTime) e.startTime = 'Seleziona un orario'
+    if (!booking.address.trim()) e.address = 'Inserisci l\'indirizzo'
+    if (booking.hours < 1) e.hours = 'Minimo 1 ora'
+    // Data non nel passato
+    if (booking.date && new Date(booking.date) < new Date().setHours(0,0,0,0)) {
+      e.date = 'La data non può essere nel passato'
+    }
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
+
+  const validateStep3 = () => {
+    const e = {}
+    const cardClean = payment.cardNumber.replace(/\s/g, '')
+    if (cardClean.length < 16) e.cardNumber = 'Numero carta non valido'
+    if (!payment.cardName.trim()) e.cardName = 'Inserisci il nome sul carta'
+    if (!payment.expiry.match(/^\d{2}\/\d{2}$/)) {
+      e.expiry = 'Formato MM/AA'
+    } else {
+      const [mm, yy] = payment.expiry.split('/')
+      const expDate = new Date(2000 + parseInt(yy), parseInt(mm) - 1)
+      if (expDate < new Date()) e.expiry = 'Carta scaduta'
+    }
+    if (payment.cvv.length < 3) e.cvv = 'CVV non valido'
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
+
+  // ─── FORMATTER CARTA ────────────────────────────────────
+  const formatCardNumber = (val) => {
+    const clean = val.replace(/\D/g, '').slice(0, 16)
+    return clean.replace(/(.{4})/g, '$1 ').trim()
+  }
+
+  const formatExpiry = (val) => {
+    const clean = val.replace(/\D/g, '').slice(0, 4)
+    if (clean.length >= 2) {
+      return clean.slice(0, 2) + '/' + clean.slice(2)
+    }
+    return clean
+  }
+
+  // ─── TIPO CARTA (da numero) ──────────────────────────────
+  const getCardType = () => {
+    const n = payment.cardNumber.replace(/\s/g, '')
+    if (n.startsWith('4')) return { name: 'Visa', emoji: '💳', color: '#1A1F71' }
+    if (n.startsWith('5')) return { name: 'Mastercard', emoji: '💳', color: '#EB001B' }
+    if (n.startsWith('34') || n.startsWith('37')) {
+      return { name: 'Amex', emoji: '💳', color: '#007BC1' }
+    }
+    return { name: 'Carta', emoji: '💳', color: '#6B7280' }
+  }
+
+  // ─── STEP HANDLERS ──────────────────────────────────────
+  const goToStep2 = () => {
+    if (validateStep1()) setStep(2)
+  }
+
+  const goToStep3 = () => {
+    setStep(3)
+  }
+
+  const handlePayment = async () => {
+    if (!validateStep3()) return
+
+    setLoading(true)
+
+    // Simula elaborazione pagamento (1.5s)
+    await new Promise(r => setTimeout(r, 1500))
+
+    const id = generateBookingId()
+    setBookingId(id)
+
+    // Salva prenotazione
+    saveBooking({
+      id,
+      caregiverId: caregiver.id,
+      caregiverName: caregiver.name,
+      caregiverPhoto: caregiver.photo,
+      userId: user?.id,
+      userName: user?.name,
+      date: booking.date,
+      startTime: booking.startTime,
+      hours: booking.hours,
+      serviceType: booking.serviceType,
+      address: booking.address,
+      notes: booking.notes,
+      subtotal,
+      commission: kydCommission,
+      total: parseFloat(total),
+      status: 'confermata',
+      createdAt: new Date().toISOString()
+    })
+
+    setLoading(false)
+    setStep(4) // Conferma
+  }
+
+  // ─── SERVICE LABELS ─────────────────────────────────────
+  const serviceLabels = {
+    baby: '👶 Babysitting',
+    pet: '🐾 Pet Sitting',
+    elder: '👴 Assistenza Anziani'
+  }
+
+  // ─── MIN DATE (oggi) ─────────────────────────────────────
+  const today = new Date().toISOString().split('T')[0]
+
+  // ─── PROGRESS BAR ───────────────────────────────────────
+  const steps = [
+    { n: 1, label: 'Dettagli' },
+    { n: 2, label: 'Riepilogo' },
+    { n: 3, label: 'Pagamento' },
+    { n: 4, label: 'Conferma' }
+  ]
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+
+      {/* NAVBAR MINIMALE */}
+      <nav className="bg-white border-b px-6 py-4 flex items-center
+                      justify-between sticky top-0 z-40 shadow-sm">
+        <Link to="/" className="flex items-center gap-2">
+          <span className="text-2xl">🛡️</span>
+          <span className="font-bold text-blue-600 text-xl">KYD</span>
+        </Link>
+        <div className="text-sm text-gray-500">
+          🔒 Pagamento sicuro — SSL/TLS 256bit
+        </div>
+      </nav>
+
+      <div className="max-w-2xl mx-auto px-4 py-8">
+
+        {/* PROGRESS BAR */}
+        {step < 4 && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-2">
+              {steps.filter(s => s.n < 4).map((s, i) => (
+                <div key={s.n} className="flex items-center flex-1">
+                  <div className="flex flex-col items-center">
+                    <div className={`w-9 h-9 rounded-full flex items-center
+                                    justify-center text-sm font-bold
+                                    transition-all duration-300 ${
+                      step > s.n
+                        ? 'bg-green-500 text-white'
+                        : step === s.n
+                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                          : 'bg-gray-200 text-gray-500'
+                    }`}>
+                      {step > s.n ? '✓' : s.n}
+                    </div>
+                    <span className={`text-xs mt-1 font-medium ${
+                      step >= s.n ? 'text-blue-600' : 'text-gray-400'
+                    }`}>
+                      {s.label}
+                    </span>
+                  </div>
+                  {i < 2 && (
+                    <div className={`flex-1 h-1 mx-2 mb-5 rounded transition-all
+                                    duration-500 ${
+                      step > s.n ? 'bg-green-400' : 'bg-gray-200'
+                    }`}/>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════
+            STEP 1 — DETTAGLI PRENOTAZIONE
+        ════════════════════════════════════════════ */}
+        {step === 1 && (
+          <div className="space-y-6">
+
+            {/* Card caregiver selezionato */}
+            <div className="bg-white rounded-2xl border border-gray-100
+                            shadow-sm p-5">
+              <div className="flex items-center gap-4">
+                <img
+                  src={caregiver.photo}
+                  alt={caregiver.name}
+                  className="w-16 h-16 rounded-xl object-cover"
+                  onError={e => {
+                    e.target.style.display = 'none'
+                  }}
+                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-bold text-gray-900 text-lg">
+                      {caregiver.name}
+                    </h2>
+                    <span className="text-blue-500">✅</span>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    📍 {caregiver.neighborhood}, {caregiver.city}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-amber-400 text-sm">
+                      {'★'.repeat(Math.floor(caregiver.rating))}
+                    </span>
+                    <span className="text-sm font-semibold text-gray-700">
+                      {caregiver.rating}
+                    </span>
+                    <span className="font-bold text-blue-600">
+                      €{caregiver.hourlyRate}/ora
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Form dettagli */}
+            <div className="bg-white rounded-2xl border border-gray-100
+                            shadow-sm p-6 space-y-5">
+              <h3 className="font-bold text-gray-900 text-lg">
+                📅 Dettagli della prenotazione
+              </h3>
+
+              {/* Tipo servizio (se il caregiver ne offre più di uno) */}
+              {caregiver.services.length > 1 && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Tipo di servizio
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {caregiver.services.map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setBooking(b => ({...b, serviceType: s}))}
+                        className={`py-2.5 px-4 rounded-xl border-2 text-sm
+                                    font-medium transition-all ${
+                          booking.serviceType === s
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
+                            : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                        }`}
+                      >
+                        {serviceLabels[s]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Data */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Data *
+                </label>
+                <input
+                  type="date"
+                  min={today}
+                  value={booking.date}
+                  onChange={e => setBooking(b => ({...b, date: e.target.value}))}
+                  className={`w-full border-2 rounded-xl px-4 py-3 text-sm
+                              focus:outline-none transition ${
+                    errors.date
+                      ? 'border-red-400 bg-red-50'
+                      : 'border-gray-200 focus:border-blue-500'
+                  }`}
+                />
+                {errors.date && (
+                  <p className="text-red-500 text-xs mt-1">⚠ {errors.date}</p>
+                )}
+              </div>
+
+              {/* Orario inizio + Numero ore */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    Orario inizio *
+                  </label>
+                  <select
+                    value={booking.startTime}
+                    onChange={e => setBooking(b => ({
+                      ...b, startTime: e.target.value
+                    }))}
+                    className={`w-full border-2 rounded-xl px-4 py-3 text-sm
+                                focus:outline-none bg-white transition ${
+                      errors.startTime
+                        ? 'border-red-400'
+                        : 'border-gray-200 focus:border-blue-500'
+                    }`}
+                  >
+                    <option value="">Seleziona</option>
+                    {Array.from({length: 24}, (_, i) => {
+                      const h = String(i).padStart(2, '0')
+                      return (
+                        <option key={h} value={`${h}:00`}>{h}:00</option>
+                      )
+                    })}
+                  </select>
+                  {errors.startTime && (
+                    <p className="text-red-500 text-xs mt-1">
+                      ⚠ {errors.startTime}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    Durata (ore)
+                  </label>
+                  <div className="flex items-center border-2 border-gray-200
+                                  rounded-xl overflow-hidden focus-within:border-blue-500">
+                    <button
+                      onClick={() => setBooking(b => ({
+                        ...b, hours: Math.max(1, b.hours - 1)
+                      }))}
+                      className="px-4 py-3 text-gray-500 hover:bg-gray-50
+                                 text-xl font-bold transition"
+                    >−</button>
+                    <div className="flex-1 text-center font-bold text-gray-900 text-lg">
+                      {booking.hours}h
+                    </div>
+                    <button
+                      onClick={() => setBooking(b => ({
+                        ...b, hours: Math.min(12, b.hours + 1)
+                      }))}
+                      className="px-4 py-3 text-gray-500 hover:bg-gray-50
+                                 text-xl font-bold transition"
+                    >+</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Indirizzo */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Indirizzo del servizio *
+                </label>
+                <input
+                  type="text"
+                  value={booking.address}
+                  onChange={e => setBooking(b => ({
+                    ...b, address: e.target.value
+                  }))}
+                  placeholder="Via Roma 1, Milano"
+                  className={`w-full border-2 rounded-xl px-4 py-3 text-sm
+                              focus:outline-none transition ${
+                    errors.address
+                      ? 'border-red-400 bg-red-50'
+                      : 'border-gray-200 focus:border-blue-500'
+                  }`}
+                />
+                {errors.address && (
+                  <p className="text-red-500 text-xs mt-1">⚠ {errors.address}</p>
+                )}
+              </div>
+
+              {/* Note */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Note per il caregiver
+                  <span className="text-gray-400 font-normal ml-1">(opzionale)</span>
+                </label>
+                <textarea
+                  value={booking.notes}
+                  onChange={e => setBooking(b => ({
+                    ...b, notes: e.target.value
+                  }))}
+                  placeholder="Es: mia figlia ha 3 anni, ama disegnare. Il cane si chiama Rocky..."
+                  rows={3}
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3
+                             text-sm focus:outline-none focus:border-blue-500
+                             resize-none transition"
+                />
+              </div>
+            </div>
+
+            {/* Preview prezzo */}
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4
+                            flex items-center justify-between">
+              <div>
+                <div className="text-sm text-blue-700">Stima costo totale</div>
+                <div className="text-xs text-blue-500 mt-0.5">
+                  {booking.hours}h × €{caregiver.hourlyRate} + commissione KYD
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-blue-700">
+                €{total}
+              </div>
+            </div>
+
+            <button
+              onClick={goToStep2}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white
+                         font-bold py-4 rounded-2xl transition-all duration-200
+                         text-lg shadow-lg shadow-blue-200"
+            >
+              Continua → Riepilogo
+            </button>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════
+            STEP 2 — RIEPILOGO ORDINE
+        ════════════════════════════════════════════ */}
+        {step === 2 && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-gray-100
+                            shadow-sm p-6">
+              <h3 className="font-bold text-gray-900 text-xl mb-6">
+                📋 Riepilogo prenotazione
+              </h3>
+
+              {/* Caregiver */}
+              <div className="flex items-center gap-4 p-4 bg-gray-50
+                              rounded-xl mb-6">
+                <img
+                  src={caregiver.photo}
+                  alt={caregiver.name}
+                  className="w-14 h-14 rounded-xl object-cover"
+                />
+                <div>
+                  <div className="font-bold text-gray-900">{caregiver.name}</div>
+                  <div className="text-sm text-gray-500">
+                    {serviceLabels[booking.serviceType]}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    📍 {booking.address}
+                  </div>
+                </div>
+              </div>
+
+              {/* Dettagli servizio */}
+              <div className="space-y-3 mb-6">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">📅 Data</span>
+                  <span className="font-semibold text-gray-900">
+                    {new Date(booking.date).toLocaleDateString('it-IT', {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric'
+                    })}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">🕐 Orario</span>
+                  <span className="font-semibold text-gray-900">
+                    {booking.startTime} —{' '}
+                    {String(
+                      (parseInt(booking.startTime) + booking.hours) % 24
+                    ).padStart(2,'0')}:00
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">⏱ Durata</span>
+                  <span className="font-semibold text-gray-900">
+                    {booking.hours} {booking.hours === 1 ? 'ora' : 'ore'}
+                  </span>
+                </div>
+                {booking.notes && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">📝 Note</span>
+                    <span className="font-semibold text-gray-900 text-right
+                                     max-w-48">
+                      {booking.notes}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Separatore */}
+              <div className="border-t border-dashed border-gray-200 my-4"/>
+
+              {/* ─── CALCOLO PREZZI ─── */}
+              <div className="space-y-3">
+
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">
+                    Tariffa caregiver
+                  </span>
+                  <span className="text-gray-900">
+                    {booking.hours}h × €{caregiver.hourlyRate}/h
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-900 font-semibold">
+                    Subtotale
+                  </span>
+                  <span className="font-semibold text-gray-900">
+                    €{subtotal.toFixed(2)}
+                  </span>
+                </div>
+
+                {/* Commissione KYD */}
+                <div className="flex justify-between text-sm items-start">
+                  <div>
+                    <span className="text-gray-600">
+                      Commissione KYD (15%)
+                    </span>
+                    <div className="text-xs text-gray-400 mt-0.5 max-w-52">
+                      Copre verifica caregiver, assicurazione RC,
+                      supporto 24/7 e garanzia rimborso
+                    </div>
+                  </div>
+                  <span className="text-gray-700 font-medium ml-4">
+                    +€{kydCommissionDisplay}
+                  </span>
+                </div>
+
+                {/* Separatore */}
+                <div className="border-t border-gray-200 my-2"/>
+
+                {/* TOTALE */}
+                <div className="flex justify-between items-center">
+                  <span className="text-lg font-bold text-gray-900">
+                    Totale da pagare
+                  </span>
+                  <span className="text-2xl font-bold text-blue-600">
+                    €{total}
+                  </span>
+                </div>
+
+                {/* Breakdown payout */}
+                <div className="bg-gray-50 rounded-xl p-4 space-y-2 mt-2">
+                  <div className="text-xs font-semibold text-gray-500
+                                   uppercase tracking-wide mb-2">
+                    Come vengono usati i tuoi €{total}
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="flex items-center gap-2">
+                      <span className="w-3 h-3 bg-green-500 rounded-full"/>
+                      Pagato a {caregiver.name}
+                    </span>
+                    <span className="font-semibold text-green-600">
+                      €{subtotal.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="flex items-center gap-2">
+                      <span className="w-3 h-3 bg-blue-500 rounded-full"/>
+                      Commissione KYD
+                    </span>
+                    <span className="font-semibold text-blue-600">
+                      €{kydCommissionDisplay}
+                    </span>
+                  </div>
+                  {/* Barra visiva split */}
+                  <div className="flex rounded-full overflow-hidden h-2 mt-2">
+                    <div
+                      className="bg-green-500 transition-all"
+                      style={{ width: `${(1 - KYD_COMMISSION_RATE) * 100}%` }}
+                    />
+                    <div
+                      className="bg-blue-500"
+                      style={{ width: `${KYD_COMMISSION_RATE * 100}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Garanzie */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { icon: '🔒', text: 'Pagamento sicuro Stripe' },
+                { icon: '↩️', text: 'Rimborso gratuito -24h' },
+                { icon: '🛡️', text: 'RC inclusa nel servizio' }
+              ].map((g, i) => (
+                <div key={i} className="bg-white rounded-xl border p-3
+                                         text-center text-xs text-gray-600
+                                         shadow-sm">
+                  <div className="text-2xl mb-1">{g.icon}</div>
+                  {g.text}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setStep(1)}
+                className="flex-1 border-2 border-gray-200 text-gray-600
+                           hover:border-gray-300 font-semibold py-3 rounded-2xl
+                           transition"
+              >
+                ← Modifica
+              </button>
+              <button
+                onClick={goToStep3}
+                className="flex-2 bg-blue-600 hover:bg-blue-700 text-white
+                           font-bold py-3 px-8 rounded-2xl transition
+                           shadow-lg shadow-blue-200"
+              >
+                Vai al pagamento →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════
+            STEP 3 — PAGAMENTO
+        ════════════════════════════════════════════ */}
+        {step === 3 && (
+          <div className="space-y-6">
+
+            {/* CARD VISIVA (effetto carta fisica) */}
+            <div
+              className="relative h-52 rounded-3xl p-6 overflow-hidden
+                          shadow-2xl text-white"
+              style={{
+                background: `linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%)`
+              }}
+            >
+              {/* Sfere decorative */}
+              <div className="absolute top-0 right-0 w-48 h-48 bg-white/10
+                              rounded-full -translate-y-12 translate-x-12"/>
+              <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5
+                              rounded-full translate-y-8 -translate-x-8"/>
+
+              {/* Logo chip */}
+              <div className="flex justify-between items-start mb-6">
+                <div className="text-xl font-bold opacity-90">
+                  {getCardType().emoji} {getCardType().name}
+                </div>
+                <div className="w-10 h-7 bg-yellow-400 rounded opacity-90"/>
+              </div>
+
+              {/* Numero carta */}
+              <div className="font-mono text-xl tracking-widest mb-4">
+                {payment.cardNumber
+                  ? payment.cardNumber.padEnd(19, '·').replace(/X/g,'·')
+                  : '•••• •••• •••• ••••'}
+              </div>
+
+              {/* Nome e scadenza */}
+              <div className="flex justify-between items-end">
+                <div>
+                  <div className="text-xs opacity-60 uppercase tracking-wide">
+                    Intestatario
+                  </div>
+                  <div className="font-semibold uppercase tracking-wide">
+                    {payment.cardName || 'NOME COGNOME'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs opacity-60 uppercase tracking-wide">
+                    Scade
+                  </div>
+                  <div className="font-mono font-semibold">
+                    {payment.expiry || 'MM/AA'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Form pagamento */}
+            <div className="bg-white rounded-2xl border border-gray-100
+                            shadow-sm p-6 space-y-5">
+
+              <div className="flex items-center gap-2 mb-2">
+                <h3 className="font-bold text-gray-900 text-lg">
+                  💳 Dati di pagamento
+                </h3>
+                <div className="flex items-center gap-1 text-green-600
+                                text-xs bg-green-50 px-2 py-1 rounded-full">
+                  🔒 Sicuro
+                </div>
+              </div>
+
+              {/* Numero carta */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Numero carta *
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={19}
+                    value={payment.cardNumber}
+                    onChange={e => setPayment(p => ({
+                      ...p,
+                      cardNumber: formatCardNumber(e.target.value)
+                    }))}
+                    placeholder="1234 5678 9012 3456"
+                    className={`w-full border-2 rounded-xl px-4 py-3 pr-16
+                                text-sm font-mono tracking-wider
+                                focus:outline-none transition ${
+                      errors.cardNumber
+                        ? 'border-red-400 bg-red-50'
+                        : 'border-gray-200 focus:border-blue-500'
+                    }`}
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2
+                                  flex gap-1">
+                    {/* Loghi carte */}
+                    <div className="text-lg">
+                      {payment.cardNumber.startsWith('4') ? '💙'
+                       : payment.cardNumber.replace(/\s/,'').startsWith('5') ? '🔴'
+                       : '💳'}
+                    </div>
+                  </div>
+                </div>
+                {errors.cardNumber && (
+                  <p className="text-red-500 text-xs mt-1">
+                    ⚠ {errors.cardNumber}
+                  </p>
+                )}
+                {/* Carte accettate */}
+                <p className="text-xs text-gray-400 mt-1">
+                  Accettiamo: Visa, Mastercard, American Express
+                </p>
+              </div>
+
+              {/* Nome carta */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Nome sull'intestatario *
+                </label>
+                <input
+                  type="text"
+                  value={payment.cardName}
+                  onChange={e => setPayment(p => ({
+                    ...p, cardName: e.target.value.toUpperCase()
+                  }))}
+                  placeholder="MARIO ROSSI"
+                  className={`w-full border-2 rounded-xl px-4 py-3 text-sm
+                              font-medium uppercase tracking-wide
+                              focus:outline-none transition ${
+                    errors.cardName
+                      ? 'border-red-400 bg-red-50'
+                      : 'border-gray-200 focus:border-blue-500'
+                  }`}
+                />
+                {errors.cardName && (
+                  <p className="text-red-500 text-xs mt-1">
+                    ⚠ {errors.cardName}
+                  </p>
+                )}
+              </div>
+
+              {/* Scadenza + CVV */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    Scadenza *
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={5}
+                    value={payment.expiry}
+                    onChange={e => setPayment(p => ({
+                      ...p, expiry: formatExpiry(e.target.value)
+                    }))}
+                    placeholder="MM/AA"
+                    className={`w-full border-2 rounded-xl px-4 py-3 text-sm
+                                font-mono focus:outline-none transition ${
+                      errors.expiry
+                        ? 'border-red-400 bg-red-50'
+                        : 'border-gray-200 focus:border-blue-500'
+                    }`}
+                  />
+                  {errors.expiry && (
+                    <p className="text-red-500 text-xs mt-1">
+                      ⚠ {errors.expiry}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    CVV *
+                    <span className="ml-1 text-gray-400 text-xs
+                                     font-normal cursor-help"
+                          title="3 cifre sul retro della carta (Amex: 4 cifre sul fronte)">
+                      ℹ️
+                    </span>
+                  </label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={payment.cvv}
+                    onChange={e => setPayment(p => ({
+                      ...p,
+                      cvv: e.target.value.replace(/\D/g,'').slice(0,4)
+                    }))}
+                    placeholder="•••"
+                    className={`w-full border-2 rounded-xl px-4 py-3 text-sm
+                                font-mono focus:outline-none transition ${
+                      errors.cvv
+                        ? 'border-red-400 bg-red-50'
+                        : 'border-gray-200 focus:border-blue-500'
+                    }`}
+                  />
+                  {errors.cvv && (
+                    <p className="text-red-500 text-xs mt-1">⚠ {errors.cvv}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Salva carta */}
+              <label className="flex items-center gap-3 cursor-pointer
+                                p-3 bg-gray-50 rounded-xl hover:bg-gray-100
+                                transition">
+                <input
+                  type="checkbox"
+                  checked={payment.saveCard}
+                  onChange={e => setPayment(p => ({
+                    ...p, saveCard: e.target.checked
+                  }))}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">
+                    Salva carta per i prossimi acquisti
+                  </span>
+                  <div className="text-xs text-gray-400">
+                    I dati sono criptati con AES-256
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {/* Totale finale */}
+            <div className="bg-blue-600 rounded-2xl p-5 text-white">
+              <div className="flex justify-between items-center mb-3">
+                <div>
+                  <div className="text-blue-100 text-sm">
+                    Servizio: {booking.hours}h con {caregiver.name}
+                  </div>
+                  <div className="text-blue-200 text-xs mt-0.5">
+                    {booking.date} alle {booking.startTime}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-3xl font-bold">€{total}</div>
+                  <div className="text-blue-200 text-xs">IVA inclusa</div>
+                </div>
+              </div>
+              <div className="text-xs text-blue-200 bg-blue-700/50
+                              rounded-xl p-3">
+                🔒 Il pagamento è protetto da SSL 256-bit.
+                Il tuo addebito avverrà solo dopo la conferma del caregiver.
+              </div>
+            </div>
+
+            {/* Bottoni */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setStep(2)}
+                className="border-2 border-gray-200 text-gray-600
+                           hover:border-gray-300 font-semibold py-3 px-6
+                           rounded-2xl transition"
+              >
+                ← Indietro
+              </button>
+              <button
+                onClick={handlePayment}
+                disabled={loading}
+                className="flex-1 bg-green-600 hover:bg-green-700
+                           disabled:opacity-60 text-white font-bold
+                           py-4 rounded-2xl transition-all shadow-lg
+                           shadow-green-200 flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24"
+                         fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10"
+                              stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor"
+                            d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                    Elaborazione pagamento...
+                  </>
+                ) : (
+                  <>🔒 Paga €{total} e conferma</>
+                )}
+              </button>
+            </div>
+
+            <p className="text-center text-xs text-gray-400">
+              Cliccando "Paga" accetti i Termini di Servizio di KYD.
+              Cancellazione gratuita entro 24h dalla prenotazione.
+            </p>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════
+            STEP 4 — CONFERMA PAGAMENTO
+        ════════════════════════════════════════════ */}
+        {step === 4 && (
+          <div className="text-center space-y-6">
+
+            {/* Animazione successo */}
+            <div className="bg-white rounded-3xl border border-gray-100
+                            shadow-sm p-10">
+
+              {/* Icona check animata */}
+              <div className="relative inline-flex items-center justify-center
+                              w-28 h-28 mb-6">
+                <div className="absolute inset-0 bg-green-100 rounded-full
+                                animate-ping opacity-30"/>
+                <div className="w-28 h-28 bg-green-500 rounded-full
+                                flex items-center justify-center
+                                shadow-lg shadow-green-200">
+                  <span className="text-5xl">✓</span>
+                </div>
+              </div>
+
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Prenotazione confermata! 🎉
+              </h2>
+              <p className="text-gray-500 mb-6">
+                Il pagamento di <strong className="text-green-600">
+                €{total}</strong> è stato elaborato con successo
+              </p>
+
+              {/* Numero prenotazione */}
+              <div className="bg-gray-50 border-2 border-dashed border-gray-200
+                              rounded-2xl p-5 mb-6">
+                <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">
+                  Numero prenotazione
+                </div>
+                <div className="text-2xl font-mono font-bold text-gray-900
+                                tracking-widest">
+                  {bookingId}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">
+                  Salvalo per i tuoi riferimenti
+                </div>
+              </div>
+
+              {/* Dettagli conferma */}
+              <div className="text-left space-y-3 bg-blue-50 rounded-2xl p-5 mb-6">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={caregiver.photo}
+                    alt={caregiver.name}
+                    className="w-12 h-12 rounded-xl object-cover"
+                  />
+                  <div>
+                    <div className="font-bold text-gray-900">
+                      {caregiver.name}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {serviceLabels[booking.serviceType]}
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm mt-3">
+                  <div className="bg-white rounded-xl p-3">
+                    <div className="text-gray-400 text-xs">Data</div>
+                    <div className="font-semibold text-gray-900">
+                      {new Date(booking.date).toLocaleDateString('it-IT')}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl p-3">
+                    <div className="text-gray-400 text-xs">Orario</div>
+                    <div className="font-semibold text-gray-900">
+                      {booking.startTime} ({booking.hours}h)
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl p-3">
+                    <div className="text-gray-400 text-xs">Indirizzo</div>
+                    <div className="font-semibold text-gray-900 text-xs">
+                      {booking.address}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl p-3">
+                    <div className="text-gray-400 text-xs">Totale pagato</div>
+                    <div className="font-bold text-green-600">€{total}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Prossimi passi */}
+              <div className="text-left space-y-2 mb-6">
+                <div className="text-sm font-bold text-gray-700 mb-3">
+                  Cosa succede ora?
+                </div>
+                {[
+                  {
+                    icon:'📧',
+                    text:`Email di conferma inviata a ${user?.email}`
+                  },
+                  {
+                    icon:'📱',
+                    text:'Il caregiver riceverà una notifica immediata'
+                  },
+                  {
+                    icon:'💬',
+                    text:'Puoi scrivere a '+ caregiver.name +' in chat ora'
+                  },
+                  {
+                    icon:'🔔',
+                    text:'Ti avviseremo 2h prima dell\'appuntamento'
+                  }
+                ].map((step, i) => (
+                  <div key={i} className="flex items-center gap-3 text-sm
+                                          text-gray-600 bg-gray-50 rounded-xl p-3">
+                    <span className="text-xl">{step.icon}</span>
+                    {step.text}
+                  </div>
+                ))}
+              </div>
+
+              {/* CTA buttons */}
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => navigate(
+                    `/chat?room=${caregiver.id}&user=family`
+                  )}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white
+                             font-bold py-4 rounded-2xl transition-all
+                             shadow-lg shadow-blue-200"
+                >
+                  💬 Scrivi a {caregiver.name}
+                </button>
+                <button
+                  onClick={() => navigate('/')}
+                  className="w-full border-2 border-gray-200 text-gray-600
+                             hover:bg-gray-50 font-semibold py-3 rounded-2xl
+                             transition"
+                >
+                  🏠 Torna alla Home
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+════════════════════════════════════════
+MODIFICA 2 — FLUSSO "DIVENTA CAREGIVER"
+════════════════════════════════════════
+
+FLUSSO COMPLETO IN 6 STEP CON PROGRESS BAR:
+Step 1: Tipo di servizio offerto
+Step 2: Informazioni personali
+Step 3: Esperienza e certificazioni
+Step 4: Zona operativa e disponibilità
+Step 5: Foto profilo e bio
+Step 6: Conferma e attivazione profilo
+
+Il profilo viene salvato in localStorage e
+AGGIUNTO DAVVERO alla lista caregivers visibile in /ricerca
+
+════════════════════════════════════════
+FILE: src/pages/DiventaCaregiver.jsx
+════════════════════════════════════════
+
+```javascript
+import { useState, useRef } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { SERVICE_COLORS, SERVICE_LABELS } from '../data/mockData'
+
+// Coordinate città italiane principali
+const CITY_COORDS = {
+  'Milano':    { lat: 45.4642, lng: 9.1900 },
+  'Roma':      { lat: 41.9028, lng: 12.4964 },
+  'Torino':    { lat: 45.0703, lng: 7.6869 },
+  'Bologna':   { lat: 44.4949, lng: 11.3426 },
+  'Firenze':   { lat: 43.7696, lng: 11.2558 },
+  'Napoli':    { lat: 40.8518, lng: 14.2681 },
+  'Venezia':   { lat: 45.4408, lng: 12.3155 },
+  'Genova':    { lat: 44.4056, lng: 8.9463 },
+  'Palermo':   { lat: 38.1157, lng: 13.3615 },
+  'Bari':      { lat: 41.1171, lng: 16.8719 },
+  'Catania':   { lat: 37.5079, lng: 15.0830 },
+  'Verona':    { lat: 45.4384, lng: 10.9916 },
+  'Padova':    { lat: 45.4064, lng: 11.8768 },
+  'Trieste':   { lat: 45.6495, lng: 13.7768 },
+  'Brescia':   { lat: 45.5416, lng: 10.2118 }
+}
+
+const CERTIFICATIONS_OPTIONS = {
+  baby: [
+    'Primo Soccorso Pediatrico',
+    'CPR Bambini',
+    'HACCP Alimentare',
+    'Pedagogia 0-6 anni',
+    'Metodo Montessori',
+    'Inglese madrelingua',
+    'Nuoto infantile',
+    'Aiuto compiti'
+  ],
+  pet: [
+    'Pet First Aid',
+    'Dog Training Base',
+    'Dog Training Avanzato',
+    'Toelettatura',
+    'Pet Behaviour',
+    'GPS Tracking',
+    'RC Animali inclusa',
+    'Gestione cani aggressivi'
+  ],
+  elder: [
+    'OSS Certificato',
+    'Primo Soccorso',
+    'Alzheimer Care',
+    'Fisioterapia Assistita',
+    'Somministrazione farmaci',
+    'Supporto psicologico',
+    'Accompagnamento visite',
+    'Assistenza notturna'
+  ]
+}
+
+const DAYS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
+const SLOTS = [
+  '06:00-09:00', '09:00-13:00', '13:00-17:00',
+  '17:00-21:00', '21:00-24:00', 'Notte'
+]
+
+// Salva caregiver in localStorage
+const saveNewCaregiver = (caregiver) => {
+  const existing = JSON.parse(
+    localStorage.getItem('kyd_custom_caregivers') || '[]'
+  )
+  existing.push(caregiver)
+  localStorage.setItem('kyd_custom_caregivers', JSON.stringify(existing))
+}
+
+export default function DiventaCaregiver() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const fileInputRef = useRef(null)
+
+  const [step, setStep] = useState(1)
+  const [loading, setLoading] = useState(false)
+
+  // ─── DATI FORM ───────────────────────────────────────────
+  const [services, setServices] = useState([])    // ['baby','pet','elder']
+  const [personalInfo, setPersonalInfo] = useState({
+    name: user?.name || '',
+    age: '',
+    gender: '',
+    phone: '',
+    email: user?.email || ''
+  })
+  const [experience, setExperience] = useState({
+    years: '1',
+    certifications: [],
+    languages: ['Italiano'],
+    bio: ''
+  })
+  const [zone, setZone] = useState({
+    city: user?.city || '',
+    neighborhood: '',
+    radius: 5,
+    hourlyRate: 12,
+    schedule: {}  // { 'Lun': ['09:00-13:00'], ... }
+  })
+  const [profile, setProfile] = useState({
+    photoUrl: '',
+    photoFile: null,
+    photoPreview: ''
+  })
+
+  const totalSteps = 6
+
+  // ─── TOGGLE SERVIZI ──────────────────────────────────────
+  const toggleService = (s) => {
+    setServices(prev =>
+      prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+    )
+  }
+
+  // ─── TOGGLE CERTIFICAZIONE ───────────────────────────────
+  const toggleCert = (cert) => {
+    setExperience(e => ({
+      ...e,
+      certifications: e.certifications.includes(cert)
+        ? e.certifications.filter(c => c !== cert)
+        : [...e.certifications, cert]
+    }))
+  }
+
+  // ─── TOGGLE LINGUA ───────────────────────────────────────
+  const toggleLanguage = (lang) => {
+    setExperience(e => ({
+      ...e,
+      languages: e.languages.includes(lang)
+        ? e.languages.filter(l => l !== lang)
+        : [...e.languages, lang]
+    }))
+  }
+
+  // ─── TOGGLE SCHEDULE ─────────────────────────────────────
+  const toggleSlot = (day, slot) => {
+    setZone(z => {
+      const daySlots = z.schedule[day] || []
+      const newSlots = daySlots.includes(slot)
+        ? daySlots.filter(s => s !== slot)
+        : [...daySlots, slot]
+      return {
+        ...z,
+        schedule: { ...z.schedule, [day]: newSlots }
+      }
+    })
+  }
+
+  // ─── FOTO UPLOAD ─────────────────────────────────────────
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setProfile(p => ({
+        ...p,
+        photoFile: file,
+        photoPreview: ev.target.result
+      }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // ─── VALIDAZIONI PER STEP ────────────────────────────────
+  const canProceed = () => {
+    switch(step) {
+      case 1: return services.length > 0
+      case 2: return personalInfo.name && personalInfo.age &&
+                     personalInfo.phone && personalInfo.email
+      case 3: return experience.bio.length >= 50
+      case 4: return zone.city && zone.neighborhood
+      case 5: return true // foto opzionale
+      default: return true
+    }
+  }
+
+  // ─── SUBMIT FINALE ───────────────────────────────────────
+  const handleSubmit = async () => {
+    setLoading(true)
+    await new Promise(r => setTimeout(r, 2000))
+
+    const coords = CITY_COORDS[zone.city] || { lat: 41.9028, lng: 12.4964 }
+
+    const newCaregiver = {
+      id: 'custom-' + Date.now(),
+      name: personalInfo.name,
+      age: parseInt(personalInfo.age),
+      city: zone.city,
+      neighborhood: zone.neighborhood,
+      lat: coords.lat + (Math.random() - 0.5) * 0.05,
+      lng: coords.lng + (Math.random() - 0.5) * 0.05,
+      radius: zone.radius,
+      rating: 5.0,
+      reviewCount: 0,
+      hourlyRate: zone.hourlyRate,
+      services: services,
+      primaryService: services[0],
+      verified: false,      // diventa true dopo verifica KYD
+      pendingVerification: true,
+      available: true,
+      photo: profile.photoPreview ||
+             `https://randomuser.me/api/portraits/${
+               personalInfo.gender === 'F' ? 'women' : 'men'
+             }/${Math.floor(Math.random() * 90) + 10}.jpg`,
+      certifications: experience.certifications,
+      bio: experience.bio,
+      languages: experience.languages,
+      experience: parseInt(experience.years),
+      schedule: zone.schedule,
+      phone: personalInfo.phone,
+      email: personalInfo.email,
+      reviews: [],
+      createdAt: new Date().toISOString(),
+      isCustom: true
+    }
+
+    saveNewCaregiver(newCaregiver)
+    setLoading(false)
+    setStep(6) // Step conferma
+  }
+
+  // ─── PROGRESS BAR ────────────────────────────────────────
+  const stepLabels = [
+    'Servizi', 'Chi sei', 'Esperienza',
+    'Zona', 'Profilo', 'Conferma'
+  ]
+
+  // ─── CERTIFICAZIONI DISPONIBILI ──────────────────────────
+  const availableCerts = services.flatMap(s =>
+    CERTIFICATIONS_OPTIONS[s] || []
+  ).filter((c, i, arr) => arr.indexOf(c) === i)
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+
+      {/* NAVBAR */}
+      <nav className="bg-white border-b px-6 py-4 flex items-center
+                      justify-between sticky top-0 z-40 shadow-sm">
+        <Link to="/" className="flex items-center gap-2">
+          <span className="text-2xl">🛡️</span>
+          <span className="font-bold text-blue-600 text-xl">KYD</span>
+        </Link>
+        {step < 6 && (
+          <div className="text-sm text-gray-500">
+            Step {step} di {totalSteps - 1}
+          </div>
+        )}
+      </nav>
+
+      <div className="max-w-2xl mx-auto px-4 py-8">
+
+        {/* PROGRESS BAR (step 1-5) */}
+        {step < 6 && (
+          <div className="mb-8">
+            <div className="flex gap-1 mb-3">
+              {stepLabels.slice(0, 5).map((label, i) => (
+                <div key={i} className="flex-1">
+                  <div className={`h-2 rounded-full transition-all duration-500 ${
+                    i + 1 <= step ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}/>
+                  <div className={`text-xs text-center mt-1 font-medium ${
+                    i + 1 === step ? 'text-blue-600' : 'text-gray-400'
+                  }`}>
+                    {label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════
+            STEP 1 — SCEGLI SERVIZI
+        ══════════════════════════════════════════ */}
+        {step === 1 && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <div className="text-5xl mb-4">🏅</div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Unisciti a KYD come Caregiver
+              </h1>
+              <p className="text-gray-500 mt-2">
+                Inizia a guadagnare aiutando famiglie italiane.
+                Ci vogliono solo 5 minuti.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl border shadow-sm p-6">
+              <h2 className="font-bold text-gray-900 text-lg mb-2">
+                Che servizi vuoi offrire?
+              </h2>
+              <p className="text-sm text-gray-500 mb-5">
+                Puoi selezionarne anche più di uno
+              </p>
+
+              <div className="space-y-3">
+                {[
+                  {
+                    key: 'baby',
+                    emoji: '👶',
+                    title: 'Babysitter',
+                    desc: 'Cura di bambini 0-14 anni',
+                    rate: 'Da €12/h',
+                    color: 'blue'
+                  },
+                  {
+                    key: 'pet',
+                    emoji: '🐾',
+                    title: 'Pet-sitter',
+                    desc: 'Cura di cani, gatti e altri animali',
+                    rate: 'Da €10/h',
+                    color: 'green'
+                  },
+                  {
+                    key: 'elder',
+                    emoji: '👴',
+                    title: 'Assistente anziani',
+                    desc: 'Assistenza a persone non autosufficienti',
+                    rate: 'Da €15/h',
+                    color: 'amber'
+                  }
+                ].map(s => (
+                  <button
+                    key={s.key}
+                    onClick={() => toggleService(s.key)}
+                    className={`w-full flex items-center gap-4 p-4 rounded-2xl
+                                border-2 text-left transition-all duration-200 ${
+                      services.includes(s.key)
+                        ? s.color === 'blue'
+                          ? 'border-blue-500 bg-blue-50'
+                          : s.color === 'green'
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-amber-500 bg-amber-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className="text-4xl">{s.emoji}</span>
+                    <div className="flex-1">
+                      <div className="font-bold text-gray-900">{s.title}</div>
+                      <div className="text-sm text-gray-500">{s.desc}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-sm font-bold ${
+                        s.color === 'blue' ? 'text-blue-600'
+                        : s.color === 'green' ? 'text-green-600'
+                        : 'text-amber-600'
+                      }`}>
+                        {s.rate}
+                      </div>
+                      <div className={`w-6 h-6 rounded-full border-2 mt-1
+                                       mx-auto flex items-center justify-center ${
+                        services.includes(s.key)
+                          ? 'bg-blue-600 border-blue-600 text-white'
+                          : 'border-gray-300'
+                      }`}>
+                        {services.includes(s.key) && '✓'}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Stats motivazionali */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { v: '€18/h', l: 'Media guadagno' },
+                { v: '8.500+', l: 'Caregiver attivi' },
+                { v: '3 min', l: 'Per iscriversi' }
+              ].map((s, i) => (
+                <div key={i} className="bg-white rounded-xl border p-3
+                                         text-center shadow-sm">
+                  <div className="font-bold text-blue-600 text-lg">{s.v}</div>
+                  <div className="text-xs text-gray-500">{s.l}</div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setStep(2)}
+              disabled={!canProceed()}
+              className="w-full bg-blue-600 hover:bg-blue-700
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         text-white font-bold py-4 rounded-2xl transition
+                         shadow-lg shadow-blue-200"
+            >
+              Continua →
+            </button>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════
+            STEP 2 — INFORMAZIONI PERSONALI
+        ══════════════════════════════════════════ */}
+        {step === 2 && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <div className="text-5xl mb-3">👤</div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                Informazioni personali
+              </h2>
+              <p className="text-gray-500 text-sm mt-1">
+                Questi dati saranno visibili sul tuo profilo
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl border shadow-sm p-6 space-y-4">
+
+              {/* Nome */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Nome e cognome *
+                </label>
+                <input
+                  type="text"
+                  value={personalInfo.name}
+                  onChange={e => setPersonalInfo(p => ({
+                    ...p, name: e.target.value
+                  }))}
+                  placeholder="Mario Rossi"
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3
+                             text-sm focus:outline-none focus:border-blue-500 transition"
+                />
+              </div>
+
+              {/* Età + Genere */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    Età *
+                  </label>
+                  <input
+                    type="number"
+                    min={18}
+                    max={80}
+                    value={personalInfo.age}
+                    onChange={e => setPersonalInfo(p => ({
+                      ...p, age: e.target.value
+                    }))}
+                    placeholder="25"
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3
+                               text-sm focus:outline-none focus:border-blue-500 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    Genere
+                  </label>
+                  <select
+                    value={personalInfo.gender}
+                    onChange={e => setPersonalInfo(p => ({
+                      ...p, gender: e.target.value
+                    }))}
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3
+                               text-sm focus:outline-none focus:border-blue-500
+                               bg-white transition"
+                  >
+                    <option value="">Seleziona</option>
+                    <option value="M">Uomo</option>
+                    <option value="F">Donna</option>
+                    <option value="X">Preferisco non dire</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Telefono */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Numero di telefono *
+                </label>
+                <input
+                  type="tel"
+                  value={personalInfo.phone}
+                  onChange={e => setPersonalInfo(p => ({
+                    ...p, phone: e.target.value
+                  }))}
+                  placeholder="+39 333 123 4567"
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3
+                             text-sm focus:outline-none focus:border-blue-500 transition"
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  value={personalInfo.email}
+                  onChange={e => setPersonalInfo(p => ({
+                    ...p, email: e.target.value
+                  }))}
+                  placeholder="mario@esempio.it"
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3
+                             text-sm focus:outline-none focus:border-blue-500 transition"
+                />
+              </div>
+
+              {/* Privacy notice */}
+              <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700">
+                🔒 I tuoi dati personali non saranno mai condivisi
+                con terze parti. Telefono ed email visibili solo dopo
+                prenotazione confermata.
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setStep(1)}
+                      className="border-2 border-gray-200 text-gray-600
+                                 font-semibold py-3 px-6 rounded-2xl transition
+                                 hover:bg-gray-50">
+                ← Indietro
+              </button>
+              <button
+                onClick={() => canProceed() && setStep(3)}
+                disabled={!canProceed()}
+                className="flex-1 bg-blue-600 hover:bg-blue-700
+                           disabled:opacity-50 text-white font-bold
+                           py-3 rounded-2xl transition shadow-lg shadow-blue-200"
+              >
+                Continua →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════
+            STEP 3 — ESPERIENZA E CERTIFICAZIONI
+        ══════════════════════════════════════════ */}
+        {step === 3 && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <div className="text-5xl mb-3">🎓</div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                Esperienza e competenze
+              </h2>
+              <p className="text-gray-500 text-sm mt-1">
+                Più dettagli = più prenotazioni!
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl border shadow-sm p-6 space-y-5">
+
+              {/* Anni esperienza */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Anni di esperienza nel settore
+                </label>
+                <div className="grid grid-cols-5 gap-2">
+                  {['< 1', '1', '2-3', '4-5', '5+'].map(y => (
+                    <button
+                      key={y}
+                      onClick={() => setExperience(e => ({...e, years: y}))}
+                      className={`py-2 rounded-xl border-2 text-sm font-medium
+                                  transition-all ${
+                        experience.years === y
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                      }`}
+                    >
+                      {y}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Certificazioni */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Certificazioni e competenze
+                  <span className="text-gray-400 font-normal ml-1">
+                    (seleziona tutto ciò che hai)
+                  </span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {availableCerts.map(cert => (
+                    <button
+                      key={cert}
+                      onClick={() => toggleCert(cert)}
+                      className={`px-3 py-1.5 rounded-full border text-xs
+                                  font-medium transition-all ${
+                        experience.certifications.includes(cert)
+                          ? 'bg-blue-600 border-blue-600 text-white'
+                          : 'border-gray-200 text-gray-600 hover:border-blue-400'
+                      }`}
+                    >
+                      {experience.certifications.includes(cert) ? '✓ ' : ''}
+                      {cert}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lingue */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Lingue parlate
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    'Italiano', 'Inglese', 'Francese', 'Spagnolo',
+                    'Tedesco', 'Arabo', 'Cinese', 'Portoghese'
+                  ].map(lang => (
+                    <button
+                      key={lang}
+                      onClick={() => toggleLanguage(lang)}
+                      className={`px-3 py-1.5 rounded-full border text-xs
+                                  font-medium transition-all ${
+                        experience.languages.includes(lang)
+                          ? 'bg-green-600 border-green-600 text-white'
+                          : 'border-gray-200 text-gray-600 hover:border-green-400'
+                      }`}
+                    >
+                      {experience.languages.includes(lang) ? '✓ ' : ''}
+                      {lang}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bio */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Raccontati *
+                  <span className="text-gray-400 font-normal ml-1">
+                    (minimo 50 caratteri)
+                  </span>
+                </label>
+                <textarea
+                  value={experience.bio}
+                  onChange={e => setExperience(ex => ({
+                    ...ex, bio: e.target.value
+                  }))}
+                  placeholder="Descrivi chi sei, la tua esperienza e perché le famiglie dovrebbero sceglierti. Parla della tua passione, del tuo approccio, di storie positive..."
+                  rows={5}
+                  className={`w-full border-2 rounded-xl px-4 py-3 text-sm
+                              focus:outline-none resize-none transition ${
+                    experience.bio.length > 0 && experience.bio.length < 50
+                      ? 'border-red-300 bg-red-50'
+                      : experience.bio.length >= 50
+                        ? 'border-green-400'
+                        : 'border-gray-200 focus:border-blue-500'
+                  }`}
+                />
+                <div className={`text-xs mt-1 text-right ${
+                  experience.bio.length < 50 ? 'text-red-400' : 'text-green-500'
+                }`}>
+                  {experience.bio.length}/50 caratteri minimi
+                  {experience.bio.length >= 50 && ' ✓ Ottimo!'}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setStep(2)}
+                      className="border-2 border-gray-200 text-gray-600
+                                 font-semibold py-3 px-6 rounded-2xl transition">
+                ← Indietro
+              </button>
+              <button
+                onClick={() => canProceed() && setStep(4)}
+                disabled={!canProceed()}
+                className="flex-1 bg-blue-600 hover:bg-blue-700
+                           disabled:opacity-50 text-white font-bold
+                           py-3 rounded-2xl transition shadow-lg shadow-blue-200"
+              >
+                Continua →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════
+            STEP 4 — ZONA OPERATIVA E DISPONIBILITÀ
+        ══════════════════════════════════════════ */}
+        {step === 4 && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <div className="text-5xl mb-3">📍</div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                Dove lavori?
+              </h2>
+              <p className="text-gray-500 text-sm mt-1">
+                Definisci la tua zona operativa e disponibilità
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl border shadow-sm p-6 space-y-5">
+
+              {/* Città */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Città principale *
+                </label>
+                <select
+                  value={zone.city}
+                  onChange={e => setZone(z => ({...z, city: e.target.value}))}
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3
+                             text-sm focus:outline-none focus:border-blue-500
+                             bg-white transition"
+                >
+                  <option value="">Seleziona la tua città</option>
+                  {Object.keys(CITY_COORDS).map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quartiere */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Quartiere/Zona specifica *
+                </label>
+                <input
+                  type="text"
+                  value={zone.neighborhood}
+                  onChange={e => setZone(z => ({
+                    ...z, neighborhood: e.target.value
+                  }))}
+                  placeholder="Es: Navigli, Parioli, Trastevere..."
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3
+                             text-sm focus:outline-none focus:border-blue-500 transition"
+                />
+              </div>
+
+              {/* Raggio operativo */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Raggio operativo:{' '}
+                  <span className="text-blue-600 font-bold">
+                    {zone.radius} km
+                  </span>
+                </label>
+                <input
+                  type="range"
+                  min={2}
+                  max={30}
+                  value={zone.radius}
+                  onChange={e => setZone(z => ({
+                    ...z, radius: parseInt(e.target.value)
+                  }))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none
+                             cursor-pointer accent-blue-600"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>2 km (solo quartiere)</span>
+                  <span>30 km (tutta la provincia)</span>
+                </div>
+              </div>
+
+              {/* Tariffa oraria */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  La tua tariffa oraria:{' '}
+                  <span className="text-blue-600 font-bold">
+                    €{zone.hourlyRate}/h
+                  </span>
+                </label>
+                <input
+                  type="range"
+                  min={8}
+                  max={35}
+                  value={zone.hourlyRate}
+                  onChange={e => setZone(z => ({
+                    ...z, hourlyRate: parseInt(e.target.value)
+                  }))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none
+                             cursor-pointer accent-green-600"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>€8/h</span>
+                  <span>€35/h</span>
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded-xl
+                                p-3 mt-2 text-xs text-green-700">
+                  💡 La media KYD per {
+                    services[0] === 'baby' ? 'babysitter' :
+                    services[0] === 'pet' ? 'pet-sitter' :
+                    'assistente anziani'
+                  } è €{
+                    services[0] === 'baby' ? '14' :
+                    services[0] === 'pet' ? '12' : '17'
+                  }/h.
+                  Guadagnerai €{
+                    Math.round(zone.hourlyRate * (1 - 0.15))
+                  }/h (KYD trattiene 15% di commissione).
+                </div>
+              </div>
+            </div>
+
+            {/* Disponibilità settimanale */}
+            <div className="bg-white rounded-2xl border shadow-sm p-6">
+              <h3 className="font-bold text-gray-900 mb-1">
+                📅 Disponibilità settimanale
+              </h3>
+              <p className="text-xs text-gray-500 mb-4">
+                Indica quando sei generalmente disponibile.
+                Potrai modificarla in seguito.
+              </p>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr>
+                      <th className="text-left text-gray-500 pb-2 pr-2 font-medium">
+                        Giorno
+                      </th>
+                      {SLOTS.map(s => (
+                        <th key={s}
+                            className="text-gray-500 pb-2 px-1 font-medium
+                                       text-center min-w-16">
+                          {s.split('-')[0]}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {DAYS.map(day => (
+                      <tr key={day}>
+                        <td className="py-1 pr-2 font-semibold text-gray-700">
+                          {day}
+                        </td>
+                        {SLOTS.map(slot => {
+                          const active =
+                            (zone.schedule[day] || []).includes(slot)
+                          return (
+                            <td key={slot} className="py-1 px-1 text-center">
+                              <button
+                                onClick={() => toggleSlot(day, slot)}
+                                className={`w-8 h-6 rounded text-xs font-medium
+                                            transition-all ${
+                                  active
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-100 text-gray-400 hover:bg-blue-100'
+                                }`}
+                              >
+                                {active ? '✓' : ''}
+                              </button>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setStep(3)}
+                      className="border-2 border-gray-200 text-gray-600
+                                 font-semibold py-3 px-6 rounded-2xl transition">
+                ← Indietro
+              </button>
+              <button
+                onClick={() => canProceed() && setStep(5)}
+                disabled={!canProceed()}
+                className="flex-1 bg-blue-600 hover:bg-blue-700
+                           disabled:opacity-50 text-white font-bold
+                           py-3 rounded-2xl transition shadow-lg shadow-blue-200"
+              >
+                Continua →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════
+            STEP 5 — FOTO E RIEPILOGO
+        ══════════════════════════════════════════ */}
+        {step === 5 && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <div className="text-5xl mb-3">📸</div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                La tua foto profilo
+              </h2>
+              <p className="text-gray-500 text-sm mt-1">
+                I profili con foto ricevono il 3x più prenotazioni
+              </p>
+            </div>
+
+            {/* Upload foto */}
+            <div className="bg-white rounded-2xl border shadow-sm p-6">
+              <div className="flex flex-col items-center">
+
+                {/* Preview/Placeholder */}
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="relative w-32 h-32 rounded-2xl overflow-hidden
+                              cursor-pointer group border-2 border-dashed
+                              border-gray-300 hover:border-blue-500 transition"
+                >
+                  {profile.photoPreview ? (
+                    <>
+                      <img
+                        src={profile.photoPreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0
+                                      group-hover:opacity-100 transition flex
+                                      items-center justify-center">
+                        <span className="text-white text-sm font-medium">
+                          Cambia foto
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center
+                                    justify-center bg-gray-50 group-hover:bg-blue-50
+                                    transition">
+                      <span className="text-4xl">📷</span>
+                      <span className="text-xs text-gray-500 mt-1 text-center px-2">
+                        Carica foto
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoChange}
+                />
+
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-4 text-blue-600 text-sm font-semibold
+                             hover:underline"
+                >
+                  {profile.photoPreview ? '📷 Cambia foto' : '📷 Carica una foto'}
+                </button>
+                <p className="text-xs text-gray-400 mt-1">
+                  JPG, PNG — max 5MB
+                </p>
+              </div>
+            </div>
+
+            {/* RIEPILOGO PROFILO */}
+            <div className="bg-white rounded-2xl border shadow-sm p-6">
+              <h3 className="font-bold text-gray-900 mb-4">
+                👁️ Anteprima del tuo profilo
+              </h3>
+
+              {/* Mini card profilo */}
+              <div className="border-2 border-gray-100 rounded-2xl p-4 bg-gray-50">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="w-16 h-16 rounded-xl overflow-hidden
+                                  bg-blue-100 flex items-center justify-center">
+                    {profile.photoPreview ? (
+                      <img src={profile.photoPreview}
+                           className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-2xl font-bold text-blue-600">
+                        {personalInfo.name.charAt(0)}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-bold text-gray-900">
+                      {personalInfo.name}, {personalInfo.age} anni
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      📍 {zone.neighborhood}, {zone.city}
+                    </div>
+                    <div className="flex gap-1 mt-1">
+                      {services.map(s => (
+                        <span key={s} className="text-xs px-2 py-0.5 rounded-full
+                                                  bg-blue-100 text-blue-700 font-medium">
+                          {SERVICE_LABELS[s]}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="ml-auto text-right">
+                    <div className="font-bold text-blue-600">
+                      €{zone.hourlyRate}/h
+                    </div>
+                    <div className="text-xs text-green-600 font-medium mt-1">
+                      ● Disponibile
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-sm text-gray-600 italic border-t pt-3">
+                  "{experience.bio.slice(0, 100)}
+                  {experience.bio.length > 100 ? '...' : ''}"
+                </p>
+
+                {experience.certifications.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-3">
+                    {experience.certifications.slice(0, 3).map(c => (
+                      <span key={c} className="text-xs bg-white border
+                                               text-gray-600 px-2 py-0.5
+                                               rounded-full">
+                        ✅ {c}
+                      </span>
+                    ))}
+                    {experience.certifications.length > 3 && (
+                      <span className="text-xs text-gray-400">
+                        +{experience.certifications.length - 3} altre
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <p className="text-xs text-gray-400 text-center mt-3">
+                Così apparirà il tuo profilo ai genitori e alle famiglie
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setStep(4)}
+                      className="border-2 border-gray-200 text-gray-600
+                                 font-semibold py-3 px-6 rounded-2xl transition">
+                ← Indietro
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="flex-1 bg-green-600 hover:bg-green-700
+                           disabled:opacity-60 text-white font-bold
+                           py-4 rounded-2xl transition shadow-lg shadow-green-200
+                           flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24"
+                         fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10"
+                              stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor"
+                            d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                    Creazione profilo in corso...
+                  </>
+                ) : (
+                  '🚀 Pubblica il mio profilo'
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════
+            STEP 6 — CONFERMA E ATTIVAZIONE
+        ══════════════════════════════════════════ */}
+        {step === 6 && (
+          <div className="text-center space-y-6">
+            <div className="bg-white rounded-3xl border shadow-sm p-10">
+
+              {/* Animazione check */}
+              <div className="relative inline-flex items-center justify-center
+                              w-28 h-28 mb-6">
+                <div className="absolute inset-0 bg-green-100 rounded-full
+                                animate-ping opacity-30"/>
+                <div className="w-28 h-28 bg-green-500 rounded-full
+                                flex items-center justify-center shadow-xl
+                                shadow-green-200">
+                  <span className="text-5xl">🎉</span>
+                </div>
+              </div>
+
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Profilo creato con successo!
+              </h2>
+              <p className="text-gray-500 mb-6">
+                <strong>{personalInfo.name}</strong>, sei ora parte della
+                famiglia KYD!
+              </p>
+
+              {/* Status badge */}
+              <div className="inline-flex items-center gap-2 bg-amber-50
+                              border border-amber-200 rounded-2xl px-5 py-3 mb-6">
+                <span className="text-amber-500 text-xl">⏳</span>
+                <div className="text-left">
+                  <div className="font-semibold text-amber-800 text-sm">
+                    Verifica in corso
+                  </div>
+                  <div className="text-xs text-amber-600">
+                    Il tuo profilo sarà visibile entro 24-48 ore
+                    dopo la verifica identità
+                  </div>
+                </div>
+              </div>
+
+              {/* Prossimi passi */}
+              <div className="text-left space-y-3 mb-6">
+                <div className="font-semibold text-gray-700 text-sm">
+                  📋 Prossimi passi:
+                </div>
+                {[
+                  {
+                    icon: '📧',
+                    title: 'Email di conferma',
+                    desc: `Inviata a ${personalInfo.email}`,
+                    done: true
+                  },
+                  {
+                    icon: '🪪',
+                    title: 'Verifica identità',
+                    desc: 'Riceverai istruzioni via email entro 1h',
+                    done: false
+                  },
+                  {
+                    icon: '✅',
+                    title: 'Profilo attivato',
+                    desc: 'Entro 24-48 ore apparirai su KYD',
+                    done: false
+                  },
+                  {
+                    icon: '💰',
+                    title: 'Prima prenotazione',
+                    desc: 'Ricevi subito una notifica!',
+                    done: false
+                  }
+                ].map((item, i) => (
+                  <div key={i} className={`flex items-center gap-3 p-3
+                                           rounded-xl border ${
+                    item.done
+                      ? 'bg-green-50 border-green-200'
+                      : 'bg-gray-50 border-gray-200'
+                  }`}>
+                    <span className="text-xl">{item.icon}</span>
+                    <div>
+                      <div className={`text-sm font-semibold ${
+                        item.done ? 'text-green-700' : 'text-gray-700'
+                      }`}>
+                        {item.title}
+                        {item.done && (
+                          <span className="ml-2 text-green-500">✓</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500">{item.desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Guadagno stimato */}
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-6">
+                <div className="text-sm font-bold text-blue-800 mb-2">
+                  💰 Il tuo potenziale di guadagno mensile
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  {[
+                    {
+                      label: 'Part-time (20h)',
+                      value: `€${Math.round(zone.hourlyRate * 20 * 0.85)}`
+                    },
+                    {
+                      label: 'Standard (60h)',
+                      value: `€${Math.round(zone.hourlyRate * 60 * 0.85)}`
+                    },
+                    {
+                      label: 'Full-time (120h)',
+                      value: `€${Math.round(zone.hourlyRate * 120 * 0.85)}`
+                    }
+                  ].map((g, i) => (
+                    <div key={i}>
+                      <div className="font-bold text-blue-700 text-lg">
+                        {g.value}
+                      </div>
+                      <div className="text-xs text-blue-500">{g.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-xs text-blue-400 mt-2">
+                  * Al netto della commissione KYD del 15%
+                </div>
+              </div>
+
+              {/* CTA */}
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => navigate('/ricerca')}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white
+                             font-bold py-4 rounded-2xl transition shadow-lg
+                             shadow-blue-200"
+                >
+                  🗺️ Vedi il tuo profilo sulla mappa
+                </button>
+                <button
+                  onClick={() => navigate('/')}
+                  className="w-full border-2 border-gray-200 text-gray-600
+                             hover:bg-gray-50 font-semibold py-3 rounded-2xl
+                             transition"
+                >
+                  🏠 Torna alla Home
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+════════════════════════════════════════
+FILE: src/hooks/useCaregivers.js
+════════════════════════════════════════
+
+Crea questo hook per unire caregiver mockData + custom:
+
+```javascript
+// src/hooks/useCaregivers.js
+import { useState, useEffect } from 'react'
+import { caregivers as mockCaregivers } from '../data/mockData'
+
+export function useCaregivers() {
+  const [allCaregivers, setAllCaregivers] = useState(mockCaregivers)
+
+  useEffect(() => {
+    // Carica caregiver custom da localStorage
+    const loadCustom = () => {
+      const custom = JSON.parse(
+        localStorage.getItem('kyd_custom_caregivers') || '[]'
+      )
+      setAllCaregivers([...mockCaregivers, ...custom])
+    }
+
+    loadCustom()
+
+    // Aggiorna quando cambia localStorage
+    window.addEventListener('storage', loadCustom)
+    return () => window.removeEventListener('storage', loadCustom)
+  }, [])
+
+  return allCaregivers
+}
+```
+
+════════════════════════════════════════
+AGGIORNA: src/pages/Ricerca.jsx
+════════════════════════════════════════
+
+Sostituisci l'import dei caregiver con l'hook:
+
+```javascript
+// PRIMA (nel file Ricerca.jsx):
+import { caregivers } from '../data/mockData'
+
+// DOPO:
+import { useCaregivers } from '../hooks/useCaregivers'
+
+// Dentro il componente Ricerca:
+// PRIMA: const caregiversFiltrati = caregivers.filter(...)
+// DOPO:
+const allCaregivers = useCaregivers()
+const caregiversFiltrati = allCaregivers.filter(c => { /* stessi filtri */ })
+```
+
+════════════════════════════════════════
+AGGIORNA: src/pages/ProfiloCaregiver.jsx
+════════════════════════════════════════
+
+Stessa cosa per il profilo:
+
+```javascript
+// Sostituisci in ProfiloCaregiver.jsx
+import { useCaregivers } from '../hooks/useCaregivers'
+
+// Dentro il componente:
+const allCaregivers = useCaregivers()
+const caregiver = allCaregivers.find(c => c.id === id)
+```
+
+════════════════════════════════════════
+AGGIORNA: src/App.jsx — AGGIUNGI ROUTE
+════════════════════════════════════════
+
+```javascript
+import DiventaCaregiver from './pages/DiventaCaregiver'
+import Prenota from './pages/Prenota'
+
+// Nelle Routes:
+<Route path="/diventa-caregiver" element={<DiventaCaregiver />} />
+<Route path="/prenota/:id" element={<Prenota />} />
+```
+
+════════════════════════════════════════
+AGGIORNA: Navbar e Homepage
+════════════════════════════════════════
+
+In Navbar.jsx: il link "Caregiver" deve puntare a /diventa-caregiver
+In Homepage CTA: "Diventa caregiver" deve puntare a /diventa-caregiver
+In ProfiloCaregiver: il button "Prenota ora" deve puntare a /prenota/:id
+
+```javascript
+// In ProfiloCaregiver.jsx, sidebar:
+<button
+  onClick={() => navigate(`/prenota/${caregiver.id}`)}
+  className="w-full bg-green-600 hover:bg-green-700 text-white
+             font-bold py-4 rounded-2xl transition shadow-lg"
+>
+  📅 Prenota ora — €{caregiver.hourlyRate}/h
+</button>
+```
+
+════════════════════════════════════════
+RIEPILOGO MODIFICHE COMPLETE
+════════════════════════════════════════
+
+FILE DA CREARE:
+✅ src/pages/Prenota.jsx         (4 step pagamento)
+✅ src/pages/DiventaCaregiver.jsx (6 step registrazione)
+✅ src/hooks/useCaregivers.js    (hook caregivers unificati)
+
+FILE DA MODIFICARE:
+✅ src/App.jsx                   (aggiungi 2 route)
+✅ src/pages/Ricerca.jsx         (usa useCaregivers hook)
+✅ src/pages/ProfiloCaregiver.jsx (usa useCaregivers + button prenota)
+✅ src/components/Navbar.jsx     (link diventa-caregiver)
+
+════════════════════════════════════════
+TEST FUNZIONALITÀ
+════════════════════════════════════════
+
+TEST PAGAMENTO:
+1. Vai su /ricerca → clicca "Vedi profilo" su Sara
+2. Clicca "Prenota ora" nella sidebar
+3. Step 1: scegli data domani, 10:00, 3 ore, inserisci indirizzo
+4. Step 2: verifica calcolo → subtotale + 15% KYD = totale
+5. Step 3: inserisci 4111 1111 1111 1111 / MARIO ROSSI / 12/26 / 123
+6. Clicca "Paga €X.XX" → loading 1.5s → Step 4 conferma
+7. Verifica numero prenotazione KYD-XX12345
+
+TEST DIVENTA CAREGIVER:
+1. Vai su /diventa-caregiver
+2. Step 1: scegli "Babysitter" + "Pet-sitter"
+3. Step 2: inserisci nome, 25 anni, telefono, email
+4. Step 3: seleziona 3 cert, scrivi bio 50+ caratteri
+5. Step 4: scegli Milano, quartiere Navigli, 8km, €14/h
+6. Step 5: carica foto (o salta) → "Pubblica profilo"
+7. Step 6: conferma + animazione
+8. Vai su /ricerca → il nuovo caregiver APPARE sulla mappa! ✅
+
+════════════════════════════════════════
+NOTA COMMISSIONE KYD
+════════════════════════════════════════
+
+La commissione del 15% è così divisa e mostrata:
+- Nel riepilogo (Step 2 prenotazione): riga separata
+- Con spiegazione: "Copre verifica, assicurazione RC, supporto 24/7"
+- Con barra visiva che mostra 85% caregiver / 15% KYD
+- Nel form caregiver: mostra guadagno netto al 85%
+- Nella conferma: importo totale pagato chiaramente evidenziato
+
+Questo rende il modello di business trasparente e
+professionale come Airbnb o Deliveroo.
+```

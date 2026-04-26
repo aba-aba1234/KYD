@@ -58,6 +58,23 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Caregiver"
+    post:
+      operationId: createCaregiver
+      tags: [caregivers]
+      summary: Apply to become a caregiver (creates a pending profile)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCaregiverInput"
+      responses:
+        "201":
+          description: Caregiver application accepted and profile created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Caregiver"
   /caregivers/{id}:
     get:
       operationId: getCaregiver
@@ -324,7 +341,15 @@ components:
           type: string
         date:
           type: string
+        startTime:
+          type: string
         hours:
+          type: number
+        address:
+          type: string
+        subtotal:
+          type: number
+        commission:
           type: number
         total:
           type: number
@@ -332,7 +357,7 @@ components:
           type: string
         createdAt:
           type: string
-      required: [id, caregiverId, caregiverName, familyName, service, date, hours, total, status, createdAt]
+      required: [id, caregiverId, caregiverName, familyName, service, date, hours, subtotal, commission, total, status, createdAt]
     CreateBookingInput:
       type: object
       properties:
@@ -344,11 +369,44 @@ components:
           type: string
         date:
           type: string
+        startTime:
+          type: string
         hours:
           type: number
+        address:
+          type: string
         notes:
           type: string
       required: [caregiverId, familyName, service, date, hours]
+    CreateCaregiverInput:
+      type: object
+      properties:
+        name:
+          type: string
+        city:
+          type: string
+        bio:
+          type: string
+        services:
+          type: array
+          items:
+            type: string
+            enum: [baby, pet, elder]
+        pricePerHour:
+          type: number
+        yearsExperience:
+          type: integer
+        certifications:
+          type: array
+          items:
+            type: string
+        radiusKm:
+          type: number
+        email:
+          type: string
+        phone:
+          type: string
+      required: [name, city, bio, services, pricePerHour, yearsExperience]
     ChatMessage:
       type: object
       properties:

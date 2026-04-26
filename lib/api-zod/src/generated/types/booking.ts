@@ -13,7 +13,11 @@ export interface Booking {
   familyName: string;
   service: string;
   date: string;
+  startTime?: string;
   hours: number;
+  address?: string;
+  subtotal: number;
+  commission: number;
   total: number;
   status: string;
   createdAt: string;

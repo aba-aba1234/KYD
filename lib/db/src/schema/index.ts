@@ -46,13 +46,17 @@ export const reviewsTable = pgTable("reviews", {
 });
 
 export const bookingsTable = pgTable("bookings", {
-  id: serial("id").primaryKey(),
+  id: text("id").primaryKey(),
   caregiverId: text("caregiver_id").notNull(),
   caregiverName: text("caregiver_name").notNull(),
   familyName: text("family_name").notNull(),
   service: text("service").notNull(),
   date: text("date").notNull(),
+  startTime: text("start_time"),
   hours: doublePrecision("hours").notNull(),
+  address: text("address"),
+  subtotal: doublePrecision("subtotal").notNull().default(0),
+  commission: doublePrecision("commission").notNull().default(0),
   total: doublePrecision("total").notNull(),
   status: text("status").notNull().default("confirmed"),
   notes: text("notes"),

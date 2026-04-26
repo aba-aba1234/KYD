@@ -15,6 +15,8 @@ export * from "./caregiverServicesItem";
 export * from "./chatMessage";
 export * from "./cityStat";
 export * from "./createBookingInput";
+export * from "./createCaregiverInput";
+export * from "./createCaregiverInputServicesItem";
 export * from "./healthStatus";
 export * from "./listCaregiversParams";
 export * from "./listCaregiversService";

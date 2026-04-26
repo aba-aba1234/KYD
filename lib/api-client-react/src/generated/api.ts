@@ -23,6 +23,7 @@ import type {
   ChatMessage,
   CityStat,
   CreateBookingInput,
+  CreateCaregiverInput,
   HealthStatus,
   ListCaregiversParams,
   Review,
@@ -207,6 +208,92 @@ export function useListCaregivers<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Apply to become a caregiver (creates a pending profile)
+ */
+export const getCreateCaregiverUrl = () => {
+  return `/api/caregivers`;
+};
+
+export const createCaregiver = async (
+  createCaregiverInput: CreateCaregiverInput,
+  options?: RequestInit,
+): Promise<Caregiver> => {
+  return customFetch<Caregiver>(getCreateCaregiverUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createCaregiverInput),
+  });
+};
+
+export const getCreateCaregiverMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCaregiver>>,
+    TError,
+    { data: BodyType<CreateCaregiverInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCaregiver>>,
+  TError,
+  { data: BodyType<CreateCaregiverInput> },
+  TContext
+> => {
+  const mutationKey = ["createCaregiver"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCaregiver>>,
+    { data: BodyType<CreateCaregiverInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createCaregiver(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCaregiverMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCaregiver>>
+>;
+export type CreateCaregiverMutationBody = BodyType<CreateCaregiverInput>;
+export type CreateCaregiverMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Apply to become a caregiver (creates a pending profile)
+ */
+export const useCreateCaregiver = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCaregiver>>,
+    TError,
+    { data: BodyType<CreateCaregiverInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createCaregiver>>,
+  TError,
+  { data: BodyType<CreateCaregiverInput> },
+  TContext
+> => {
+  return useMutation(getCreateCaregiverMutationOptions(options));
+};
 
 /**
  * @summary Get caregiver details

@@ -3,7 +3,7 @@ import { Star, MapPin, ShieldCheck, Baby, PawPrint, HeartHandshake } from "lucid
 import { Card, CardContent, CardFooter } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Avatar, AvatarFallback } from "./ui/avatar";
-import type { Caregiver } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { Caregiver } from "@workspace/api-client-react";
 
 interface CaregiverCardProps {
   caregiver: Caregiver;
@@ -76,7 +76,7 @@ export function CaregiverCard({ caregiver }: CaregiverCardProps) {
         </div>
 
         <div className="flex flex-wrap gap-2 mb-4">
-          {caregiver.services.map(service => (
+          {caregiver.services.map((service: string) => (
             <Badge key={service} variant="outline" className={`${getServiceColor(service)} font-medium`}>
               {getServiceIcon(service)}
               {getServiceLabel(service)}

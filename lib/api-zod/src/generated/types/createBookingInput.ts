@@ -11,6 +11,8 @@ export interface CreateBookingInput {
   familyName: string;
   service: string;
   date: string;
+  startTime?: string;
   hours: number;
+  address?: string;
   notes?: string;
 }

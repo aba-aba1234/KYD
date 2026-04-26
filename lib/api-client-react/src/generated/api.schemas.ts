@@ -71,7 +71,11 @@ export interface Booking {
   familyName: string;
   service: string;
   date: string;
+  startTime?: string;
   hours: number;
+  address?: string;
+  subtotal: number;
+  commission: number;
   total: number;
   status: string;
   createdAt: string;
@@ -82,8 +86,32 @@ export interface CreateBookingInput {
   familyName: string;
   service: string;
   date: string;
+  startTime?: string;
   hours: number;
+  address?: string;
   notes?: string;
+}
+
+export type CreateCaregiverInputServicesItem =
+  (typeof CreateCaregiverInputServicesItem)[keyof typeof CreateCaregiverInputServicesItem];
+
+export const CreateCaregiverInputServicesItem = {
+  baby: "baby",
+  pet: "pet",
+  elder: "elder",
+} as const;
+
+export interface CreateCaregiverInput {
+  name: string;
+  city: string;
+  bio: string;
+  services: CreateCaregiverInputServicesItem[];
+  pricePerHour: number;
+  yearsExperience: number;
+  certifications?: string[];
+  radiusKm?: number;
+  email?: string;
+  phone?: string;
 }
 
 export interface ChatMessage {

@@ -45,6 +45,22 @@ export const ListCaregiversResponseItem = zod.object({
 export const ListCaregiversResponse = zod.array(ListCaregiversResponseItem);
 
 /**
+ * @summary Apply to become a caregiver (creates a pending profile)
+ */
+export const CreateCaregiverBody = zod.object({
+  name: zod.string(),
+  city: zod.string(),
+  bio: zod.string(),
+  services: zod.array(zod.enum(["baby", "pet", "elder"])),
+  pricePerHour: zod.number(),
+  yearsExperience: zod.number(),
+  certifications: zod.array(zod.string()).optional(),
+  radiusKm: zod.number().optional(),
+  email: zod.string().optional(),
+  phone: zod.string().optional(),
+});
+
+/**
  * @summary Get caregiver details
  */
 export const GetCaregiverParams = zod.object({
@@ -133,7 +149,9 @@ export const CreateBookingBody = zod.object({
   familyName: zod.string(),
   service: zod.string(),
   date: zod.string(),
+  startTime: zod.string().optional(),
   hours: zod.number(),
+  address: zod.string().optional(),
   notes: zod.string().optional(),
 });
 
@@ -147,7 +165,11 @@ export const ListRecentBookingsResponseItem = zod.object({
   familyName: zod.string(),
   service: zod.string(),
   date: zod.string(),
+  startTime: zod.string().optional(),
   hours: zod.number(),
+  address: zod.string().optional(),
+  subtotal: zod.number(),
+  commission: zod.number(),
   total: zod.number(),
   status: zod.string(),
   createdAt: zod.string(),
