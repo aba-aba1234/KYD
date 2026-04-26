@@ -1,0 +1,2016 @@
+# 🔧 PROMPT FIX — LOGIN/REGISTRAZIONE + MAPPA CAREGIVER FUNZIONANTE
+
+```markdown
+Devi correggere e completare due funzionalità critiche del sito KYD già esistente:
+
+1. SISTEMA LOGIN/REGISTRAZIONE funzionante
+2. MAPPA RICERCA con caregiver visibili, filtri funzionanti e aree operative
+
+════════════════════════════════════════
+FIX 1 — AUTENTICAZIONE (Login/Registrazione)
+════════════════════════════════════════
+
+Crea un sistema auth completo con:
+- Context globale AuthContext
+- Persistenza in localStorage
+- Protezione route private
+- UI moderna con feedback visivo
+
+FILE: src/context/AuthContext.jsx
+
+```javascript
+import { createContext, useContext, useState, useEffect } from 'react'
+
+const AuthContext = createContext(null)
+
+// Database utenti simulato (localStorage)
+const USERS_KEY = 'kyd_users'
+const SESSION_KEY = 'kyd_session'
+
+// Utenti demo pre-caricati
+const DEMO_USERS = [
+  {
+    id: 'u1',
+    email: 'famiglia@demo.it',
+    password: 'demo123',
+    name: 'Marco Rossi',
+    role: 'family',
+    avatar: '👨‍👩‍👧',
+    city: 'Milano',
+    createdAt: '2024-01-01'
+  },
+  {
+    id: 'u2',
+    email: 'caregiver@demo.it',
+    password: 'demo123',
+    name: 'Sara Martinelli',
+    role: 'caregiver',
+    avatar: '👩‍⚕️',
+    city: 'Milano',
+    createdAt: '2024-01-01'
+  }
+]
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  // Inizializza DB utenti se vuoto
+  useEffect(() => {
+    const existing = localStorage.getItem(USERS_KEY)
+    if (!existing) {
+      localStorage.setItem(USERS_KEY, JSON.stringify(DEMO_USERS))
+    }
+
+    // Ripristina sessione
+    const session = localStorage.getItem(SESSION_KEY)
+    if (session) {
+      setUser(JSON.parse(session))
+    }
+    setLoading(false)
+  }, [])
+
+  const getUsers = () => {
+    return JSON.parse(localStorage.getItem(USERS_KEY) || '[]')
+  }
+
+  // LOGIN
+  const login = (email, password) => {
+    const users = getUsers()
+    const found = users.find(
+      u => u.email.toLowerCase() === email.toLowerCase()
+         && u.password === password
+    )
+    if (!found) {
+      return { success: false, error: 'Email o password errati' }
+    }
+    const { password: _, ...safeUser } = found
+    setUser(safeUser)
+    localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser))
+    return { success: true, user: safeUser }
+  }
+
+  // REGISTRAZIONE
+  const register = (data) => {
+    const users = getUsers()
+
+    // Check email duplicata
+    if (users.find(u => u.email.toLowerCase() === data.email.toLowerCase())) {
+      return { success: false, error: 'Email già registrata' }
+    }
+
+    const newUser = {
+      id: 'u' + Date.now(),
+      email: data.email,
+      password: data.password,
+      name: data.name,
+      role: data.role || 'family',
+      avatar: data.role === 'caregiver' ? '👩‍⚕️' : '👨‍👩‍👧',
+      city: data.city || '',
+      createdAt: new Date().toISOString()
+    }
+
+    users.push(newUser)
+    localStorage.setItem(USERS_KEY, JSON.stringify(users))
+
+    const { password: _, ...safeUser } = newUser
+    setUser(safeUser)
+    localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser))
+    return { success: true, user: safeUser }
+  }
+
+  // LOGOUT
+  const logout = () => {
+    setUser(null)
+    localStorage.removeItem(SESSION_KEY)
+  }
+
+  return (
+    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+      {!loading && children}
+    </AuthContext.Provider>
+  )
+}
+
+export const useAuth = () => useContext(AuthContext)
+```
+
+FILE: src/pages/Login.jsx
+
+```javascript
+import { useState } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+
+export default function Login() {
+  const { login } = useAuth()
+  const navigate = useNavigate()
+
+  const [form, setForm] = useState({ email: '', password: '' })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    // Simula delay server
+    await new Promise(r => setTimeout(r, 800))
+
+    const result = login(form.email, form.password)
+    setLoading(false)
+
+    if (result.success) {
+      navigate('/')
+    } else {
+      setError(result.error)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white
+                    flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 mb-4">
+            <span className="text-4xl">🛡️</span>
+            <span className="text-3xl font-bold text-blue-600">KYD</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">Bentornato!</h1>
+          <p className="text-gray-500 mt-1">Accedi al tuo account KYD</p>
+        </div>
+
+        {/* Card */}
+        <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+
+          {/* Demo credentials box */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+            <p className="text-sm font-semibold text-blue-800 mb-2">
+              🎓 Credenziali Demo
+            </p>
+            <div className="space-y-1">
+              <p className="text-xs text-blue-700">
+                <span className="font-medium">Famiglia:</span>
+                famiglia@demo.it / demo123
+              </p>
+              <p className="text-xs text-blue-700">
+                <span className="font-medium">Caregiver:</span>
+                caregiver@demo.it / demo123
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+
+            {/* Email */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                required
+                value={form.email}
+                onChange={e => setForm({...form, email: e.target.value})}
+                placeholder="mario@esempio.it"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3
+                           text-sm focus:outline-none focus:border-blue-500
+                           focus:ring-2 focus:ring-blue-500/20 transition"
+              />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                required
+                value={form.password}
+                onChange={e => setForm({...form, password: e.target.value})}
+                placeholder="••••••••"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3
+                           text-sm focus:outline-none focus:border-blue-500
+                           focus:ring-2 focus:ring-blue-500/20 transition"
+              />
+            </div>
+
+            {/* Errore */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3
+                              flex items-center gap-2">
+                <span>❌</span>
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700
+                         disabled:opacity-60 disabled:cursor-not-allowed
+                         text-white font-semibold py-3 rounded-xl
+                         transition-all duration-200 flex items-center
+                         justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"
+                       fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10"
+                            stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor"
+                          d="M4 12a8 8 0 018-8v8H4z"/>
+                  </svg>
+                  Accesso in corso...
+                </>
+              ) : (
+                'Accedi →'
+              )}
+            </button>
+          </form>
+
+          {/* Link registrazione */}
+          <div className="mt-6 pt-6 border-t text-center">
+            <p className="text-sm text-gray-500">
+              Non hai un account?{' '}
+              <Link to="/registrati"
+                    className="text-blue-600 font-semibold hover:underline">
+                Registrati gratis
+              </Link>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+FILE: src/pages/Registrati.jsx
+
+```javascript
+import { useState } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+
+const CITIES = [
+  'Milano', 'Roma', 'Torino', 'Bologna', 'Firenze',
+  'Napoli', 'Venezia', 'Genova', 'Palermo', 'Bari'
+]
+
+export default function Registrati() {
+  const { register } = useAuth()
+  const navigate = useNavigate()
+
+  const [step, setStep] = useState(1) // Step 1: tipo account, Step 2: dati
+  const [role, setRole] = useState('') // 'family' | 'caregiver'
+  const [form, setForm] = useState({
+    name: '', email: '', password: '',
+    confirmPassword: '', city: '', acceptTerms: false
+  })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleRoleSelect = (selectedRole) => {
+    setRole(selectedRole)
+    setStep(2)
+  }
+
+  const validate = () => {
+    if (!form.name.trim()) return 'Inserisci il tuo nome'
+    if (!form.email.includes('@')) return 'Email non valida'
+    if (form.password.length < 6) return 'Password minimo 6 caratteri'
+    if (form.password !== form.confirmPassword) return 'Le password non coincidono'
+    if (!form.city) return 'Seleziona la tua città'
+    if (!form.acceptTerms) return 'Devi accettare i termini di servizio'
+    return null
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+
+    const validationError = validate()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setLoading(true)
+    await new Promise(r => setTimeout(r, 1000))
+
+    const result = register({ ...form, role })
+    setLoading(false)
+
+    if (result.success) {
+      navigate('/')
+    } else {
+      setError(result.error)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white
+                    flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 mb-4">
+            <span className="text-4xl">🛡️</span>
+            <span className="text-3xl font-bold text-blue-600">KYD</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">Crea il tuo account</h1>
+          <p className="text-gray-500 mt-1">È gratis. Sempre.</p>
+        </div>
+
+        {/* STEP 1: Scegli tipo account */}
+        {step === 1 && (
+          <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-900 text-center mb-6">
+              Come vuoi usare KYD?
+            </h2>
+            <div className="space-y-4">
+
+              {/* Famiglia */}
+              <button
+                onClick={() => handleRoleSelect('family')}
+                className="w-full border-2 border-gray-200 hover:border-blue-500
+                           hover:bg-blue-50 rounded-2xl p-6 text-left transition-all
+                           group"
+              >
+                <div className="flex items-center gap-4">
+                  <span className="text-4xl">👨‍👩‍👧</span>
+                  <div>
+                    <div className="font-bold text-gray-900 group-hover:text-blue-600">
+                      Sono una Famiglia
+                    </div>
+                    <div className="text-sm text-gray-500 mt-1">
+                      Cerco babysitter, pet-sitter o badanti verificati
+                    </div>
+                  </div>
+                  <span className="ml-auto text-gray-300
+                                   group-hover:text-blue-500 text-xl">→</span>
+                </div>
+              </button>
+
+              {/* Caregiver */}
+              <button
+                onClick={() => handleRoleSelect('caregiver')}
+                className="w-full border-2 border-gray-200 hover:border-green-500
+                           hover:bg-green-50 rounded-2xl p-6 text-left transition-all
+                           group"
+              >
+                <div className="flex items-center gap-4">
+                  <span className="text-4xl">🏅</span>
+                  <div>
+                    <div className="font-bold text-gray-900 group-hover:text-green-600">
+                      Sono un Caregiver
+                    </div>
+                    <div className="text-sm text-gray-500 mt-1">
+                      Offro servizi di assistenza e voglio nuovi clienti
+                    </div>
+                  </div>
+                  <span className="ml-auto text-gray-300
+                                   group-hover:text-green-500 text-xl">→</span>
+                </div>
+              </button>
+            </div>
+
+            <div className="mt-6 text-center">
+              <p className="text-sm text-gray-500">
+                Hai già un account?{' '}
+                <Link to="/login"
+                      className="text-blue-600 font-semibold hover:underline">
+                  Accedi
+                </Link>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2: Dati personali */}
+        {step === 2 && (
+          <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+
+            {/* Back */}
+            <button
+              onClick={() => setStep(1)}
+              className="flex items-center gap-2 text-sm text-gray-500
+                         hover:text-gray-700 mb-6 transition"
+            >
+              ← Torna indietro
+            </button>
+
+            {/* Ruolo selezionato */}
+            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full
+                            text-sm font-medium mb-6 ${
+              role === 'family'
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-green-100 text-green-700'
+            }`}>
+              <span>{role === 'family' ? '👨‍👩‍👧' : '🏅'}</span>
+              <span>{role === 'family' ? 'Famiglia' : 'Caregiver'}</span>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+
+              {/* Nome */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome e cognome
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={e => setForm({...form, name: e.target.value})}
+                  placeholder="Mario Rossi"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3
+                             text-sm focus:outline-none focus:border-blue-500
+                             focus:ring-2 focus:ring-blue-500/20 transition"
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={e => setForm({...form, email: e.target.value})}
+                  placeholder="mario@esempio.it"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3
+                             text-sm focus:outline-none focus:border-blue-500
+                             focus:ring-2 focus:ring-blue-500/20 transition"
+                />
+              </div>
+
+              {/* Città */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Città
+                </label>
+                <select
+                  value={form.city}
+                  onChange={e => setForm({...form, city: e.target.value})}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3
+                             text-sm focus:outline-none focus:border-blue-500
+                             focus:ring-2 focus:ring-blue-500/20 transition
+                             bg-white"
+                >
+                  <option value="">Seleziona la tua città</option>
+                  {CITIES.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={form.password}
+                  onChange={e => setForm({...form, password: e.target.value})}
+                  placeholder="Minimo 6 caratteri"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3
+                             text-sm focus:outline-none focus:border-blue-500
+                             focus:ring-2 focus:ring-blue-500/20 transition"
+                />
+              </div>
+
+              {/* Conferma password */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Conferma password
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={form.confirmPassword}
+                  onChange={e => setForm({...form, confirmPassword: e.target.value})}
+                  placeholder="Ripeti la password"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3
+                             text-sm focus:outline-none focus:border-blue-500
+                             focus:ring-2 focus:ring-blue-500/20 transition"
+                />
+              </div>
+
+              {/* Termini */}
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.acceptTerms}
+                  onChange={e => setForm({...form, acceptTerms: e.target.checked})}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300
+                             text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-600">
+                  Accetto i{' '}
+                  <a href="#" className="text-blue-600 hover:underline">
+                    Termini di Servizio
+                  </a>{' '}
+                  e la{' '}
+                  <a href="#" className="text-blue-600 hover:underline">
+                    Privacy Policy
+                  </a>
+                </span>
+              </label>
+
+              {/* Errore */}
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3
+                                flex items-center gap-2">
+                  <span>❌</span>
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-700
+                           disabled:opacity-60 text-white font-semibold
+                           py-3 rounded-xl transition-all duration-200
+                           flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"
+                         fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10"
+                              stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor"
+                            d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                    Creazione account...
+                  </>
+                ) : (
+                  '✅ Crea account gratis'
+                )}
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+════════════════════════════════════════
+FIX 2 — NAVBAR CON AUTH STATE
+════════════════════════════════════════
+
+Aggiorna Navbar.jsx per mostrare utente loggato:
+
+```javascript
+// In Navbar.jsx - importa e usa useAuth
+import { useAuth } from '../context/AuthContext'
+import { useNavigate } from 'react-router-dom'
+
+// Dentro il componente:
+const { user, logout } = useAuth()
+const navigate = useNavigate()
+
+const handleLogout = () => {
+  logout()
+  navigate('/')
+}
+
+// Sostituisci i bottoni [Accedi] [Registrati] con:
+{user ? (
+  // Utente loggato
+  <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-xl">
+      <span className="text-xl">{user.avatar}</span>
+      <div className="hidden md:block">
+        <div className="text-sm font-semibold text-gray-900 leading-none">
+          {user.name.split(' ')[0]}
+        </div>
+        <div className="text-xs text-gray-500">
+          {user.role === 'family' ? 'Famiglia' : 'Caregiver'}
+        </div>
+      </div>
+    </div>
+    <button
+      onClick={handleLogout}
+      className="text-sm text-gray-500 hover:text-red-500 transition px-3 py-2
+                 rounded-xl hover:bg-red-50"
+    >
+      Esci
+    </button>
+  </div>
+) : (
+  // Utente non loggato
+  <div className="flex items-center gap-2">
+    <Link
+      to="/login"
+      className="text-sm font-medium text-gray-700 hover:text-blue-600
+                 px-4 py-2 rounded-xl transition"
+    >
+      Accedi
+    </Link>
+    <Link
+      to="/registrati"
+      className="text-sm font-semibold text-white bg-blue-600
+                 hover:bg-blue-700 px-4 py-2 rounded-xl transition"
+    >
+      Registrati gratis
+    </Link>
+  </div>
+)}
+```
+
+════════════════════════════════════════
+FIX 3 — AGGIORNA App.jsx CON ROUTES AUTH
+════════════════════════════════════════
+
+```javascript
+// App.jsx
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
+import Login from './pages/Login'
+import Registrati from './pages/Registrati'
+// ... altri import
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Homepage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/registrati" element={<Registrati />} />
+          <Route path="/ricerca" element={<Ricerca />} />
+          <Route path="/profilo/:id" element={<ProfiloCaregiver />} />
+          <Route path="/chat" element={<Chat />} />
+          <Route path="/prenota/:id" element={<Prenota />} />
+          {/* altre route */}
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  )
+}
+```
+
+════════════════════════════════════════
+FIX 4 — MOCKDATA COMPLETO CON 12 CAREGIVER
+════════════════════════════════════════
+
+Sostituisci COMPLETAMENTE src/data/mockData.js:
+
+```javascript
+// src/data/mockData.js
+
+// Colori marker per tipo servizio
+export const SERVICE_COLORS = {
+  baby: '#3B82F6',   // blu
+  pet: '#10B981',    // verde
+  elder: '#F59E0B'   // arancione
+}
+
+// Label servizi
+export const SERVICE_LABELS = {
+  baby: '👶 Babysitter',
+  pet: '🐾 Pet-sitter',
+  elder: '👴 Badante'
+}
+
+export const caregivers = [
+  // ─── MILANO ───────────────────────────────
+  {
+    id: '1',
+    name: 'Sara Martinelli',
+    age: 24,
+    city: 'Milano',
+    neighborhood: 'Navigli',
+    lat: 45.4522,
+    lng: 9.1737,
+    radius: 8,
+    rating: 4.9,
+    reviewCount: 127,
+    hourlyRate: 15,
+    services: ['baby'],
+    primaryService: 'baby',
+    verified: true,
+    available: true,
+    photo: 'https://randomuser.me/api/portraits/women/44.jpg',
+    certifications: ['Primo Soccorso Pediatrico', 'HACCP', 'Pedagogia 0-6'],
+    bio: 'Studentessa magistrale in Scienze dell\'Educazione alla Statale di Milano. 3 anni di esperienza con bambini 0-10 anni. Certificata primo soccorso pediatrico. Paziente, creativa e affidabile. Organizzo attività ludiche e didattiche personalizzate.',
+    languages: ['Italiano', 'Inglese'],
+    experience: 3,
+    schedule: {
+      lun: ['09:00-13:00', '15:00-19:00'],
+      mar: ['09:00-13:00'],
+      mer: ['09:00-13:00', '15:00-19:00'],
+      gio: ['09:00-13:00'],
+      ven: ['09:00-13:00', '15:00-19:00'],
+      sab: ['10:00-14:00'],
+      dom: []
+    },
+    reviews: [
+      { id:'r1', author:'Claudia M.', rating:5, date:'2024-12-15',
+        comment:'Sara è meravigliosa! Mio figlio la adora. Puntuale e professionale.', verified:true },
+      { id:'r2', author:'Francesca L.', rating:5, date:'2024-11-20',
+        comment:'Organizza giochi creativi fantastici. La mia bambina la aspetta ogni settimana!', verified:true },
+      { id:'r3', author:'Roberto P.', rating:5, date:'2024-10-05',
+        comment:'Affidarsi a Sara è come affidarsi a un familiare. Massima fiducia.', verified:true }
+    ]
+  },
+  {
+    id: '2',
+    name: 'Giulia Ferretti',
+    age: 29,
+    city: 'Milano',
+    neighborhood: 'Isola',
+    lat: 45.4900,
+    lng: 9.1860,
+    radius: 6,
+    rating: 4.8,
+    reviewCount: 89,
+    hourlyRate: 14,
+    services: ['baby', 'pet'],
+    primaryService: 'baby',
+    verified: true,
+    available: true,
+    photo: 'https://randomuser.me/api/portraits/women/65.jpg',
+    certifications: ['Primo Soccorso', 'Pet First Aid'],
+    bio: 'Babysitter e pet-sitter con doppia specializzazione. Perfetta per famiglie con bambini E animali domestici! Lavoro con famiglie nel quartiere Isola e Porta Nuova da 4 anni.',
+    languages: ['Italiano', 'Francese'],
+    experience: 4,
+    schedule: {
+      lun: ['08:00-14:00'],
+      mar: ['08:00-14:00', '16:00-20:00'],
+      mer: ['08:00-14:00'],
+      gio: ['08:00-14:00', '16:00-20:00'],
+      ven: ['08:00-14:00'],
+      sab: ['09:00-17:00'],
+      dom: ['10:00-14:00']
+    },
+    reviews: [
+      { id:'r4', author:'Andrea V.', rating:5, date:'2024-12-01',
+        comment:'Gestisce il nostro bimbo e il cane con una naturalezza incredibile!', verified:true }
+    ]
+  },
+  {
+    id: '3',
+    name: 'Tommaso Ricci',
+    age: 32,
+    city: 'Milano',
+    neighborhood: 'Porta Romana',
+    lat: 45.4487,
+    lng: 9.2033,
+    radius: 10,
+    rating: 4.7,
+    reviewCount: 54,
+    hourlyRate: 16,
+    services: ['elder'],
+    primaryService: 'elder',
+    verified: true,
+    available: true,
+    photo: 'https://randomuser.me/api/portraits/men/32.jpg',
+    certifications: ['OSS', 'Primo Soccorso', 'Alzheimer Care'],
+    bio: 'Operatore Socio Sanitario certificato con 5 anni di esperienza in strutture e domicilio. Specializzato in pazienti con Alzheimer e patologie croniche. Disponibile anche per turni notturni.',
+    languages: ['Italiano'],
+    experience: 5,
+    schedule: {
+      lun: ['07:00-15:00'],
+      mar: ['07:00-15:00'],
+      mer: ['07:00-15:00', '21:00-07:00'],
+      gio: ['07:00-15:00'],
+      ven: ['07:00-15:00'],
+      sab: [],
+      dom: ['07:00-15:00']
+    },
+    reviews: [
+      { id:'r5', author:'Lucia B.', rating:5, date:'2024-12-10',
+        comment:'Assistenza eccellente per mio padre. Tommaso è una persona straordinaria.', verified:true },
+      { id:'r6', author:'Paolo G.', rating:4, date:'2024-11-15',
+        comment:'Molto competente e preciso. Mia madre si sente sicura con lui.', verified:true }
+    ]
+  },
+
+  // ─── ROMA ─────────────────────────────────
+  {
+    id: '4',
+    name: 'Luca Petri',
+    age: 30,
+    city: 'Roma',
+    neighborhood: 'Trastevere',
+    lat: 41.8891,
+    lng: 12.4697,
+    radius: 8,
+    rating: 4.8,
+    reviewCount: 89,
+    hourlyRate: 12,
+    services: ['pet'],
+    primaryService: 'pet',
+    verified: true,
+    available: true,
+    photo: 'https://randomuser.me/api/portraits/men/41.jpg',
+    certifications: ['Pet First Aid', 'Dog Training Base'],
+    bio: 'Dog walker e pet-sitter full-time a Roma dal 2020. Amo tutti gli animali. Esperienza con cani di tutte le taglie e caratteri, inclusi cani problematici. Mando foto aggiornamenti ogni ora.',
+    languages: ['Italiano', 'Inglese'],
+    experience: 4,
+    schedule: {
+      lun: ['07:00-12:00', '17:00-20:00'],
+      mar: ['07:00-12:00', '17:00-20:00'],
+      mer: ['07:00-12:00', '17:00-20:00'],
+      gio: ['07:00-12:00', '17:00-20:00'],
+      ven: ['07:00-12:00', '17:00-20:00'],
+      sab: ['08:00-14:00'],
+      dom: ['09:00-13:00']
+    },
+    reviews: [
+      { id:'r7', author:'Marco T.', rating:5, date:'2024-12-01',
+        comment:'Il mio golden retriever era felicissimo! Le foto erano bellissime.', verified:true },
+      { id:'r8', author:'Alessia R.', rating:5, date:'2024-11-10',
+        comment:'Affidabilissimo. Rocky è tornato stanco e felice ogni volta!', verified:true }
+    ]
+  },
+  {
+    id: '5',
+    name: 'Valentina Conti',
+    age: 27,
+    city: 'Roma',
+    neighborhood: 'Parioli',
+    lat: 41.9201,
+    lng: 12.4894,
+    radius: 7,
+    rating: 4.9,
+    reviewCount: 73,
+    hourlyRate: 15,
+    services: ['baby'],
+    primaryService: 'baby',
+    verified: true,
+    available: false,
+    photo: 'https://randomuser.me/api/portraits/women/22.jpg',
+    certifications: ['Primo Soccorso Pediatrico', 'Montessori Base'],
+    bio: 'Educatrice Montessori con esperienza internazionale (Londra, Parigi). Specializzata nell\'accompagnamento allo sviluppo autonomo dei bambini 2-8 anni. Al momento non disponibile fino a gennaio.',
+    languages: ['Italiano', 'Inglese', 'Francese'],
+    experience: 5,
+    schedule: {},
+    reviews: [
+      { id:'r9', author:'Sofia M.', rating:5, date:'2024-10-20',
+        comment:'Un approccio Montessori straordinario. Mia figlia è cresciuta moltissimo.', verified:true }
+    ]
+  },
+  {
+    id: '6',
+    name: 'Giuseppe Arena',
+    age: 48,
+    city: 'Roma',
+    neighborhood: 'EUR',
+    lat: 41.8317,
+    lng: 12.4680,
+    radius: 12,
+    rating: 5.0,
+    reviewCount: 156,
+    hourlyRate: 18,
+    services: ['elder'],
+    primaryService: 'elder',
+    verified: true,
+    available: true,
+    photo: 'https://randomuser.me/api/portraits/men/52.jpg',
+    certifications: ['OSS', 'Primo Soccorso', 'Fisioterapia Assistita'],
+    bio: 'OSS con 15 anni di esperienza, ex infermiere professionale. Specializzato in post-operatorio, fisioterapia assistita e pazienti non autosufficienti. La mia priorità è preservare la dignità e autonomia del paziente.',
+    languages: ['Italiano', 'Spagnolo'],
+    experience: 15,
+    schedule: {
+      lun: ['06:00-14:00', '14:00-22:00'],
+      mar: ['06:00-14:00'],
+      mer: ['14:00-22:00'],
+      gio: ['06:00-14:00', '14:00-22:00'],
+      ven: ['06:00-14:00'],
+      sab: ['08:00-16:00'],
+      dom: []
+    },
+    reviews: [
+      { id:'r10', author:'Anna L.', rating:5, date:'2024-12-05',
+        comment:'Giuseppe è un professionista eccezionale. Mia madre lo considera come un figlio.', verified:true }
+    ]
+  },
+
+  // ─── TORINO ───────────────────────────────
+  {
+    id: '7',
+    name: 'Maria Gallo',
+    age: 45,
+    city: 'Torino',
+    neighborhood: 'Crocetta',
+    lat: 45.0553,
+    lng: 7.6732,
+    radius: 12,
+    rating: 5.0,
+    reviewCount: 203,
+    hourlyRate: 18,
+    services: ['elder'],
+    primaryService: 'elder',
+    verified: true,
+    available: false,
+    photo: 'https://randomuser.me/api/portraits/women/55.jpg',
+    certifications: ['OSS', 'Primo Soccorso', 'Alzheimer Care'],
+    bio: 'OSS certificata con 10 anni di esperienza nell\'assistenza anziani a domicilio. Specializzata in pazienti con Alzheimer e demenze senili. Approccio empatico e rispettoso. Attualmente non disponibile fino a febbraio 2025.',
+    languages: ['Italiano', 'Spagnolo'],
+    experience: 10,
+    schedule: {},
+    reviews: [
+      { id:'r11', author:'Giulia F.', rating:5, date:'2024-12-10',
+        comment:'Assistenza eccellente per mia madre. Grazie Maria dal profondo del cuore!', verified:true },
+      { id:'r12', author:'Carlo S.', rating:5, date:'2024-11-25',
+        comment:'Professionalità e umanità rare. Mio padre è in ottime mani.', verified:true }
+    ]
+  },
+  {
+    id: '8',
+    name: 'Federica Moretti',
+    age: 26,
+    city: 'Torino',
+    neighborhood: 'San Salvario',
+    lat: 45.0572,
+    lng: 7.6850,
+    radius: 5,
+    rating: 4.6,
+    reviewCount: 31,
+    hourlyRate: 12,
+    services: ['pet'],
+    primaryService: 'pet',
+    verified: true,
+    available: true,
+    photo: 'https://randomuser.me/api/portraits/women/33.jpg',
+    certifications: ['Pet First Aid'],
+    bio: 'Pet-sitter e dog walker nel quartiere San Salvario e Valentino. Amo gli animali da sempre! Ho 2 cani e 1 gatto. Disponibile anche per ospitare animali a casa mia.',
+    languages: ['Italiano'],
+    experience: 2,
+    schedule: {
+      lun: ['08:00-12:00', '16:00-20:00'],
+      mar: ['08:00-12:00', '16:00-20:00'],
+      mer: ['08:00-12:00', '16:00-20:00'],
+      gio: ['08:00-12:00', '16:00-20:00'],
+      ven: ['08:00-12:00', '16:00-20:00'],
+      sab: ['09:00-18:00'],
+      dom: ['10:00-14:00']
+    },
+    reviews: []
+  },
+
+  // ─── BOLOGNA ──────────────────────────────
+  {
+    id: '9',
+    name: 'Anna Ruggeri',
+    age: 28,
+    city: 'Bologna',
+    neighborhood: 'Centro',
+    lat: 44.4949,
+    lng: 11.3426,
+    radius: 7,
+    rating: 4.9,
+    reviewCount: 56,
+    hourlyRate: 14,
+    services: ['baby', 'pet'],
+    primaryService: 'baby',
+    verified: true,
+    available: true,
+    photo: 'https://randomuser.me/api/portraits/women/28.jpg',
+    certifications: ['Primo Soccorso', 'Pet First Aid'],
+    bio: 'Babysitter e pet-sitter con doppia specializzazione. Laurea in Psicologia. Perfetta per famiglie con bambini E animali! Bologna centro e dintorni.',
+    languages: ['Italiano', 'Francese', 'Inglese'],
+    experience: 4,
+    schedule: {
+      lun: ['09:00-18:00'],
+      mar: ['09:00-18:00'],
+      mer: ['09:00-18:00'],
+      gio: ['09:00-18:00'],
+      ven: ['09:00-18:00'],
+      sab: ['10:00-16:00'],
+      dom: []
+    },
+    reviews: [
+      { id:'r13', author:'Serena V.', rating:5, date:'2024-12-03',
+        comment:'Anna è una babysitter eccezionale. I miei figli la adorano!', verified:true }
+    ]
+  },
+
+  // ─── FIRENZE ──────────────────────────────
+  {
+    id: '10',
+    name: 'Marco Bellini',
+    age: 35,
+    city: 'Firenze',
+    neighborhood: 'Oltrarno',
+    lat: 43.7626,
+    lng: 11.2491,
+    radius: 15,
+    rating: 4.7,
+    reviewCount: 34,
+    hourlyRate: 13,
+    services: ['pet'],
+    primaryService: 'pet',
+    verified: true,
+    available: true,
+    photo: 'https://randomuser.me/api/portraits/men/36.jpg',
+    certifications: ['Pet First Aid'],
+    bio: 'Dog walker e pet-sitter professionale a Firenze dal 2019. Specializzato in cani di taglia grande. Percorsi personalizzati nel parco delle Cascine e dintorni. 5 anni di esperienza.',
+    languages: ['Italiano', 'Inglese'],
+    experience: 5,
+    schedule: {
+      lun: ['07:00-11:00', '17:00-19:00'],
+      mar: ['07:00-11:00', '17:00-19:00'],
+      mer: ['07:00-11:00', '17:00-19:00'],
+      gio: ['07:00-11:00', '17:00-19:00'],
+      ven: ['07:00-11:00', '17:00-19:00'],
+      sab: ['08:00-13:00'],
+      dom: ['09:00-12:00']
+    },
+    reviews: []
+  },
+
+  // ─── NAPOLI ───────────────────────────────
+  {
+    id: '11',
+    name: 'Elena Vitale',
+    age: 22,
+    city: 'Napoli',
+    neighborhood: 'Chiaia',
+    lat: 40.8330,
+    lng: 14.2290,
+    radius: 6,
+    rating: 4.6,
+    reviewCount: 18,
+    hourlyRate: 11,
+    services: ['baby'],
+    primaryService: 'baby',
+    verified: true,
+    available: true,
+    photo: 'https://randomuser.me/api/portraits/women/18.jpg',
+    certifications: ['Primo Soccorso'],
+    bio: 'Studentessa universitaria di Pedagogia, babysitter nel quartiere Chiaia dal 2021. Creativa, paziente e affettuosa. Organizzo giochi educativi e attività creative.',
+    languages: ['Italiano'],
+    experience: 3,
+    schedule: {
+      lun: ['15:00-20:00'],
+      mar: ['15:00-20:00'],
+      mer: ['15:00-20:00'],
+      gio: ['15:00-20:00'],
+      ven: ['15:00-20:00'],
+      sab: ['09:00-19:00'],
+      dom: ['10:00-14:00']
+    },
+    reviews: []
+  },
+
+  // ─── VENEZIA ──────────────────────────────
+  {
+    id: '12',
+    name: 'Chiara Trevisan',
+    age: 38,
+    city: 'Venezia',
+    neighborhood: 'Mestre',
+    lat: 45.4861,
+    lng: 12.2386,
+    radius: 10,
+    rating: 4.8,
+    reviewCount: 67,
+    hourlyRate: 16,
+    services: ['elder'],
+    primaryService: 'elder',
+    verified: true,
+    available: true,
+    photo: 'https://randomuser.me/api/portraits/women/41.jpg',
+    certifications: ['OSS', 'Primo Soccorso', 'Supporto Psicologico Base'],
+    bio: 'OSS certificata con 7 anni di esperienza. Lavoro nell\'area veneziana (Mestre e terraferma). Specializzata in anziani soli e pazienti con difficoltà motorie. Disponibile anche weekend.',
+    languages: ['Italiano', 'Inglese'],
+    experience: 7,
+    schedule: {
+      lun: ['08:00-16:00'],
+      mar: ['08:00-16:00'],
+      mer: ['08:00-16:00'],
+      gio: ['08:00-16:00'],
+      ven: ['08:00-16:00'],
+      sab: ['09:00-15:00'],
+      dom: ['09:00-15:00']
+    },
+    reviews: [
+      { id:'r14', author:'Mario D.', rating:5, date:'2024-12-08',
+        comment:'Chiara ha trasformato la vita di mia nonna. Una persona eccezionale.', verified:true }
+    ]
+  }
+]
+
+export const testimonials = [
+  { id:1, rating:5, author:'Claudia M.',
+    role:'Mamma di Tommaso, 4 anni · Milano',
+    comment:'Ho trovato Sara in 10 minuti. Il video di presentazione mi ha fatto sentire subito al sicuro. Mio figlio la adora!',
+    verified:true },
+  { id:2, rating:5, author:'Marco T.',
+    role:'Proprietario di Rocky · Roma',
+    comment:'Finalmente posso viaggiare senza sensi di colpa. Il pet-sitter mandava foto di Rocky ogni giorno!',
+    verified:true },
+  { id:3, rating:5, author:'Giulia F.',
+    role:'Figlia di paziente anziana · Torino',
+    comment:'Ho trovato un\'assistente OSS certificata per mia madre in pochi minuti. KYD mi ha tolto ansia e incertezza.',
+    verified:true },
+  { id:4, rating:5, author:'Laura P.',
+    role:'Mamma di Emma e Sofia · Firenze',
+    comment:'Check-in, chat e report in tempo reale. Sai sempre cosa sta succedendo. Tranquillità assoluta.',
+    verified:true },
+  { id:5, rating:5, author:'Davide S.',
+    role:'Proprietario di Milo · Bologna',
+    comment:'Ho usato la prenotazione last minute. In 15 minuti avevo conferma. Incredibile!',
+    verified:true }
+]
+
+export const stats = [
+  { id:1, value:50000, suffix:'+', label:'Famiglie registrate', desc:'Si fidano di KYD' },
+  { id:2, value:8500, suffix:'+', label:'Caregiver verificati', desc:'Professionisti certificati' },
+  { id:3, value:12847, suffix:'', label:'Recensioni certificate', desc:'Media 4.9/5 stelle' },
+  { id:4, value:98, suffix:'%', label:'Servizi completati', desc:'Con successo' },
+  { id:5, value:15, suffix:'', label:'Città italiane', desc:'In espansione' },
+  { id:6, value:4.2, prefix:'€', suffix:'M', label:'Distribuiti ai caregiver', desc:'Solo nel 2024' },
+  { id:7, value:15, suffix:' min', label:'Tempo medio risposta', desc:'Per urgenze' },
+  { id:8, value:5000, suffix:'', label:'Alberi piantati', desc:'1 ogni 10 servizi' }
+]
+```
+
+════════════════════════════════════════
+FIX 5 — PAGINA RICERCA CON MAPPA FUNZIONANTE
+════════════════════════════════════════
+
+Riscrivi COMPLETAMENTE src/pages/Ricerca.jsx:
+
+```javascript
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { caregivers, SERVICE_COLORS, SERVICE_LABELS } from '../data/mockData'
+
+// ─── MAPPA LEAFLET (lazy load sicuro) ─────────────────────
+// NON importare leaflet direttamente: usa dynamic import
+// oppure includi leaflet via CDN in index.html e usa window.L
+
+function MappaRicerca({ caregiversFiltrati, selectedId, onSelectCaregiver }) {
+  const mapRef = useRef(null)
+  const leafletMapRef = useRef(null)
+  const markersRef = useRef({})
+  const circlesRef = useRef({})
+
+  // Colori per tipo servizio
+  const getColor = (caregiver) => {
+    return SERVICE_COLORS[caregiver.primaryService] || '#6B7280'
+  }
+
+  // Crea SVG marker colorato
+  const createMarkerIcon = (color, size = 36) => {
+    const L = window.L
+    return L.divIcon({
+      className: '',
+      html: `
+        <div style="
+          width: ${size}px;
+          height: ${size}px;
+          background: ${color};
+          border: 3px solid white;
+          border-radius: 50% 50% 50% 0;
+          transform: rotate(-45deg);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          cursor: pointer;
+        ">
+          <div style="
+            transform: rotate(45deg);
+            color: white;
+            font-size: ${size * 0.4}px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding-bottom: 4px;
+          ">
+            ${caregiversFiltrati.find(c =>
+              SERVICE_COLORS[c.primaryService] === color
+            )?.primaryService === 'baby' ? '👶' :
+              SERVICE_COLORS[Object.keys(SERVICE_COLORS).find(
+                k => SERVICE_COLORS[k] === color
+              )] === SERVICE_COLORS.pet ? '🐾' : '👴'}
+          </div>
+        </div>
+      `,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size],
+      popupAnchor: [0, -size]
+    })
+  }
+
+  // Inizializza mappa
+  useEffect(() => {
+    if (!mapRef.current || leafletMapRef.current) return
+    if (!window.L) {
+      console.error('Leaflet non caricato. Aggiungi CDN in index.html')
+      return
+    }
+
+    const L = window.L
+    const map = L.map(mapRef.current, {
+      center: [42.5, 12.5], // Centro Italia
+      zoom: 6,
+      zoomControl: true
+    })
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map)
+
+    leafletMapRef.current = map
+
+    return () => {
+      map.remove()
+      leafletMapRef.current = null
+    }
+  }, [])
+
+  // Aggiorna marker quando cambiano i caregiver filtrati
+  useEffect(() => {
+    const map = leafletMapRef.current
+    if (!map || !window.L) return
+    const L = window.L
+
+    // Rimuovi marker vecchi
+    Object.values(markersRef.current).forEach(m => m.remove())
+    Object.values(circlesRef.current).forEach(c => c.remove())
+    markersRef.current = {}
+    circlesRef.current = {}
+
+    if (caregiversFiltrati.length === 0) return
+
+    // Aggiungi nuovi marker
+    caregiversFiltrati.forEach(caregiver => {
+      const color = getColor(caregiver)
+      const pos = [caregiver.lat, caregiver.lng]
+
+      // Cerchio area operativa
+      const circle = L.circle(pos, {
+        radius: caregiver.radius * 1000,
+        fillColor: color,
+        fillOpacity: 0.10,
+        color: color,
+        weight: 2,
+        dashArray: '5, 5'
+      }).addTo(map)
+
+      circlesRef.current[caregiver.id] = circle
+
+      // Icona emoji servizio
+      const emoji = caregiver.primaryService === 'baby' ? '👶'
+                  : caregiver.primaryService === 'pet' ? '🐾' : '👴'
+
+      // Marker con icona custom
+      const icon = L.divIcon({
+        className: '',
+        html: `
+          <div style="
+            position: relative;
+            width: 44px;
+            height: 44px;
+          ">
+            <div style="
+              width: 44px;
+              height: 44px;
+              background: ${color};
+              border: 3px solid white;
+              border-radius: 50%;
+              box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 20px;
+              cursor: pointer;
+              transition: transform 0.2s;
+            ">${emoji}</div>
+            <div style="
+              position: absolute;
+              bottom: -6px;
+              left: 50%;
+              transform: translateX(-50%);
+              width: 0;
+              height: 0;
+              border-left: 6px solid transparent;
+              border-right: 6px solid transparent;
+              border-top: 8px solid ${color};
+            "></div>
+          </div>
+        `,
+        iconSize: [44, 52],
+        iconAnchor: [22, 52],
+        popupAnchor: [0, -52]
+      })
+
+      const marker = L.marker(pos, { icon }).addTo(map)
+
+      // Popup al click
+      marker.bindPopup(`
+        <div style="min-width:200px; font-family: sans-serif;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <img
+              src="${caregiver.photo}"
+              style="width:48px;height:48px;border-radius:50%;object-fit:cover;"
+              onerror="this.style.display='none'"
+            />
+            <div>
+              <div style="font-weight:700;font-size:14px;">${caregiver.name}</div>
+              <div style="color:#6B7280;font-size:12px;">
+                📍 ${caregiver.city} · ${caregiver.neighborhood}
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+            ${caregiver.services.map(s => `
+              <span style="
+                background:${SERVICE_COLORS[s]};
+                color:white;
+                padding:2px 8px;
+                border-radius:20px;
+                font-size:11px;
+                font-weight:600;
+              ">${SERVICE_LABELS[s]}</span>
+            `).join('')}
+          </div>
+          <div style="
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:8px;
+          ">
+            <span style="font-size:13px;">
+              ⭐ ${caregiver.rating} (${caregiver.reviewCount})
+            </span>
+            <span style="font-weight:700;color:#3B82F6;font-size:15px;">
+              €${caregiver.hourlyRate}/h
+            </span>
+          </div>
+          <div style="
+            display:inline-block;
+            padding:2px 8px;
+            border-radius:20px;
+            font-size:11px;
+            font-weight:600;
+            background:${caregiver.available ? '#ECFDF5' : '#F3F4F6'};
+            color:${caregiver.available ? '#059669' : '#6B7280'};
+            margin-bottom:10px;
+          ">
+            ${caregiver.available ? '● Disponibile ora' : '○ Non disponibile'}
+          </div>
+          <div style="display:flex;gap:8px;">
+            <a
+              href="/profilo/${caregiver.id}"
+              style="
+                flex:1;
+                background:#3B82F6;
+                color:white;
+                padding:8px;
+                border-radius:8px;
+                text-decoration:none;
+                text-align:center;
+                font-size:12px;
+                font-weight:600;
+              "
+            >Vedi profilo</a>
+            <a
+              href="/chat?room=${caregiver.id}&user=family"
+              style="
+                flex:1;
+                background:#10B981;
+                color:white;
+                padding:8px;
+                border-radius:8px;
+                text-decoration:none;
+                text-align:center;
+                font-size:12px;
+                font-weight:600;
+              "
+            >Chatta</a>
+          </div>
+        </div>
+      `, { maxWidth: 280 })
+
+      marker.on('click', () => {
+        onSelectCaregiver(caregiver.id)
+      })
+
+      markersRef.current[caregiver.id] = marker
+    })
+
+    // Fit bounds per mostrare tutti i marker
+    if (caregiversFiltrati.length > 0) {
+      const group = L.featureGroup(
+        Object.values(markersRef.current)
+      )
+      map.fitBounds(group.getBounds().pad(0.2), {
+        maxZoom: 12
+      })
+    }
+  }, [caregiversFiltrati])
+
+  // Highlight marker selezionato
+  useEffect(() => {
+    const map = leafletMapRef.current
+    if (!map || !window.L) return
+
+    Object.entries(markersRef.current).forEach(([id, marker]) => {
+      const caregiver = caregiversFiltrati.find(c => c.id === id)
+      if (!caregiver) return
+      const color = getColor(caregiver)
+      const emoji = caregiver.primaryService === 'baby' ? '👶'
+                  : caregiver.primaryService === 'pet' ? '🐾' : '👴'
+      const isSelected = id === selectedId
+      const size = isSelected ? 54 : 44
+
+      const icon = window.L.divIcon({
+        className: '',
+        html: `
+          <div style="
+            position:relative;width:${size}px;height:${size}px;
+          ">
+            <div style="
+              width:${size}px;height:${size}px;
+              background:${color};
+              border:${isSelected ? '4px solid #1E40AF' : '3px solid white'};
+              border-radius:50%;
+              box-shadow:${isSelected
+                ? '0 0 0 3px rgba(59,130,246,0.4), 0 5px 15px rgba(0,0,0,0.4)'
+                : '0 3px 10px rgba(0,0,0,0.35)'};
+              display:flex;align-items:center;justify-content:center;
+              font-size:${isSelected ? 26 : 20}px;
+              cursor:pointer;
+            ">${emoji}</div>
+            <div style="
+              position:absolute;bottom:${isSelected ? -8 : -6}px;
+              left:50%;transform:translateX(-50%);
+              width:0;height:0;
+              border-left:${isSelected ? 8 : 6}px solid transparent;
+              border-right:${isSelected ? 8 : 6}px solid transparent;
+              border-top:${isSelected ? 10 : 8}px solid ${color};
+            "></div>
+          </div>
+        `,
+        iconSize: [size, size + 10],
+        iconAnchor: [size / 2, size + 10],
+        popupAnchor: [0, -(size + 10)]
+      })
+      marker.setIcon(icon)
+
+      if (isSelected) {
+        marker.openPopup()
+      }
+    })
+  }, [selectedId, caregiversFiltrati])
+
+  return (
+    <div
+      ref={mapRef}
+      style={{
+        height: '100%',
+        minHeight: '500px',
+        width: '100%',
+        borderRadius: '0'
+      }}
+    />
+  )
+}
+
+// ─── PAGINA RICERCA PRINCIPALE ─────────────────────────────
+export default function Ricerca() {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+
+  // Filtri con valori iniziali da URL params (se arriva da homepage)
+  const [filters, setFilters] = useState({
+    service: searchParams.get('servizio') || 'tutti',
+    city: searchParams.get('zona') || '',
+    maxRate: 30,
+    onlyAvailable: false
+  })
+
+  const [selectedId, setSelectedId] = useState(null)
+  const cardRefs = useRef({})
+
+  // Filtra caregiver
+  const caregiversFiltrati = caregivers.filter(c => {
+    // Filtro servizio
+    if (filters.service !== 'tutti' && !c.services.includes(filters.service)) {
+      return false
+    }
+    // Filtro città (case insensitive, partial match)
+    if (filters.city.trim() !== '') {
+      const q = filters.city.toLowerCase()
+      if (!c.city.toLowerCase().includes(q) &&
+          !c.neighborhood.toLowerCase().includes(q)) {
+        return false
+      }
+    }
+    // Filtro prezzo
+    if (c.hourlyRate > filters.maxRate) return false
+    // Filtro disponibilità
+    if (filters.onlyAvailable && !c.available) return false
+
+    return true
+  })
+
+  // Scroll alla card quando si seleziona un marker
+  useEffect(() => {
+    if (selectedId && cardRefs.current[selectedId]) {
+      cardRefs.current[selectedId].scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      })
+    }
+  }, [selectedId])
+
+  const getServiceBadgeStyle = (service) => {
+    const colors = {
+      baby: 'bg-blue-100 text-blue-700',
+      pet: 'bg-green-100 text-green-700',
+      elder: 'bg-amber-100 text-amber-700'
+    }
+    return colors[service] || 'bg-gray-100 text-gray-700'
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+
+      {/* ─── SIDEBAR SINISTRA ───────────────────── */}
+      <div className="w-full md:w-96 flex flex-col bg-white border-r
+                      overflow-hidden flex-shrink-0">
+
+        {/* Header sidebar */}
+        <div className="p-4 bg-blue-600 text-white flex-shrink-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xl">🔍</span>
+            <h1 className="font-bold text-lg">Cerca Caregiver</h1>
+          </div>
+          <p className="text-blue-100 text-sm">
+            {caregiversFiltrati.length} professionisti trovati
+          </p>
+        </div>
+
+        {/* ─── FILTRI ─────────────────────────── */}
+        <div className="p-4 border-b bg-gray-50 flex-shrink-0 space-y-3">
+
+          {/* Tipo servizio */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 uppercase
+                               tracking-wide mb-1.5 block">
+              Tipo di servizio
+            </label>
+            <div className="grid grid-cols-4 gap-1">
+              {[
+                { value:'tutti', label:'Tutti', emoji:'🔍' },
+                { value:'baby', label:'Baby', emoji:'👶' },
+                { value:'pet', label:'Pet', emoji:'🐾' },
+                { value:'elder', label:'Anziani', emoji:'👴' }
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setFilters(f => ({...f, service: opt.value}))}
+                  className={`flex flex-col items-center gap-0.5 py-2 px-1
+                              rounded-xl text-xs font-medium transition-all
+                              border-2 ${
+                    filters.service === opt.value
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300'
+                  }`}
+                >
+                  <span className="text-lg">{opt.emoji}</span>
+                  <span>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Zona/Città */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 uppercase
+                               tracking-wide mb-1.5 block">
+              Città o quartiere
+            </label>
+            <input
+              type="text"
+              value={filters.city}
+              onChange={e => setFilters(f => ({...f, city: e.target.value}))}
+              placeholder="Es: Milano, Trastevere, Navigli..."
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5
+                         text-sm focus:outline-none focus:border-blue-500
+                         focus:ring-2 focus:ring-blue-500/20"
+            />
+          </div>
+
+          {/* Range prezzo */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 uppercase
+                               tracking-wide mb-1.5 block">
+              Budget massimo:{' '}
+              <span className="text-blue-600 font-bold">
+                €{filters.maxRate}/h
+              </span>
+            </label>
+            <input
+              type="range"
+              min={10}
+              max={30}
+              value={filters.maxRate}
+              onChange={e => setFilters(f => ({
+                ...f, maxRate: parseInt(e.target.value)
+              }))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none
+                         cursor-pointer accent-blue-600"
+            />
+            <div className="flex justify-between text-xs text-gray-400 mt-1">
+              <span>€10/h</span>
+              <span>€30/h</span>
+            </div>
+          </div>
+
+          {/* Solo disponibili */}
+          <label className="flex items-center gap-3 cursor-pointer
+                            bg-white border border-gray-200 rounded-xl p-3
+                            hover:border-blue-300 transition">
+            <div
+              onClick={() => setFilters(f => ({
+                ...f, onlyAvailable: !f.onlyAvailable
+              }))}
+              className={`relative w-11 h-6 rounded-full transition-colors
+                          flex-shrink-0 ${
+                filters.onlyAvailable ? 'bg-blue-600' : 'bg-gray-300'
+              }`}
+            >
+              <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white
+                              rounded-full shadow transition-transform ${
+                filters.onlyAvailable ? 'translate-x-5' : 'translate-x-0'
+              }`}/>
+            </div>
+            <span className="text-sm font-medium text-gray-700">
+              Solo disponibili ora
+            </span>
+          </label>
+        </div>
+
+        {/* ─── LISTA CAREGIVER ─────────────────── */}
+        <div className="flex-1 overflow-y-auto">
+          {caregiversFiltrati.length === 0 ? (
+            <div className="flex flex-col items-center justify-center
+                            h-64 text-center p-6">
+              <span className="text-5xl mb-4">😕</span>
+              <p className="font-semibold text-gray-700">
+                Nessun caregiver trovato
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                Prova a modificare i filtri o a cercare in un'altra città
+              </p>
+              <button
+                onClick={() => setFilters({
+                  service:'tutti', city:'', maxRate:30, onlyAvailable:false
+                })}
+                className="mt-4 text-blue-600 text-sm font-semibold
+                           hover:underline"
+              >
+                Reimposta filtri
+              </button>
+            </div>
+          ) : (
+            <div className="p-3 space-y-3">
+              {caregiversFiltrati.map(c => (
+                <div
+                  key={c.id}
+                  ref={el => cardRefs.current[c.id] = el}
+                  onClick={() => setSelectedId(
+                    selectedId === c.id ? null : c.id
+                  )}
+                  className={`bg-white rounded-2xl border-2 p-3 cursor-pointer
+                              transition-all duration-200 ${
+                    selectedId === c.id
+                      ? 'border-blue-500 shadow-lg shadow-blue-100'
+                      : 'border-gray-100 hover:border-blue-300 hover:shadow-md'
+                  }`}
+                >
+                  <div className="flex gap-3">
+                    {/* Avatar */}
+                    <div className="relative flex-shrink-0">
+                      <img
+                        src={c.photo}
+                        alt={c.name}
+                        className="w-14 h-14 rounded-xl object-cover"
+                        onError={e => {
+                          e.target.style.display = 'none'
+                          e.target.nextSibling.style.display = 'flex'
+                        }}
+                      />
+                      <div
+                        className="hidden w-14 h-14 rounded-xl items-center
+                                   justify-center text-white text-xl font-bold"
+                        style={{
+                          background: SERVICE_COLORS[c.primaryService]
+                        }}
+                      >
+                        {c.name.split(' ').map(n => n[0]).join('')}
+                      </div>
+                      {/* Dot disponibilità */}
+                      <div className={`absolute -bottom-1 -right-1 w-4 h-4
+                                      rounded-full border-2 border-white ${
+                        c.available ? 'bg-green-500' : 'bg-gray-400'
+                      }`}/>
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-1">
+                        <div>
+                          <div className="font-semibold text-gray-900 text-sm
+                                          flex items-center gap-1">
+                            {c.name}
+                            {c.verified && (
+                              <span className="text-blue-500 text-xs">✅</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            📍 {c.neighborhood}, {c.city}
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className="font-bold text-blue-600 text-sm">
+                            €{c.hourlyRate}/h
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            +{c.radius}km
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Rating */}
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="text-amber-400 text-xs">
+                          {'★'.repeat(Math.floor(c.rating))}
+                        </span>
+                        <span className="text-xs font-medium text-gray-700">
+                          {c.rating}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          ({c.reviewCount})
+                        </span>
+                      </div>
+
+                      {/* Badge servizi */}
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {c.services.map(s => (
+                          <span
+                            key={s}
+                            className={`text-xs px-2 py-0.5 rounded-full
+                                        font-medium ${getServiceBadgeStyle(s)}`}
+                          >
+                            {SERVICE_LABELS[s]}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottoni azione */}
+                  <div className="flex gap-2 mt-2.5">
+                    <button
+                      onClick={e => {
+                        e.stopPropagation()
+                        navigate(`/profilo/${c.id}`)
+                      }}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700
+                                 text-white text-xs font-semibold
+                                 py-1.5 rounded-lg transition"
+                    >
+                      Vedi profilo
+                    </button>
+                    <button
+                      onClick={e => {
+                        e.stopPropagation()
+                        navigate(`/chat?room=${c.id}&user=family`)
+                      }}
+                      className="flex-1 bg-green-500 hover:bg-green-600
+                                 text-white text-xs font-semibold
+                                 py-1.5 rounded-lg transition"
+                    >
+                      💬 Chatta
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ─── MAPPA DESTRA ───────────────────────── */}
+      <div className="flex-1 relative hidden md:block">
+        {/* Legenda */}
+        <div className="absolute top-4 right-4 z-[1000] bg-white rounded-xl
+                        shadow-lg p-3 space-y-2">
+          <div className="text-xs font-bold text-gray-700 mb-2">Legenda</div>
+          {Object.entries(SERVICE_LABELS).map(([key, label]) => (
+            <div key={key} className="flex items-center gap-2">
+              <div
+                className="w-6 h-6 rounded-full flex items-center
+                           justify-center text-xs"
+                style={{ background: SERVICE_COLORS[key] }}
+              >
+                {key === 'baby' ? '👶' : key === 'pet' ? '🐾' : '👴'}
+              </div>
+              <span className="text-xs text-gray-600">{label}</span>
+            </div>
+          ))}
+          <div className="border-t pt-2 mt-2">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-3 border-2 border-dashed border-gray-400
+                              rounded"/>
+              <span className="text-xs text-gray-500">Area operativa</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Contatore risultati */}
+        <div className="absolute top-4 left-4 z-[1000] bg-white rounded-xl
+                        shadow-lg px-3 py-2">
+          <span className="text-sm font-semibold text-gray-700">
+            🗺️ {caregiversFiltrati.length} caregiver sulla mappa
+          </span>
+        </div>
+
+        <MappaRicerca
+          caregiversFiltrati={caregiversFiltrati}
+          selectedId={selectedId}
+          onSelectCaregiver={setSelectedId}
+        />
+      </div>
+
+      {/* Mobile: messaggio mappa non disponibile */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white
+                      border-t p-3 flex items-center justify-center gap-2
+                      shadow-lg z-50">
+        <span>🗺️</span>
+        <span className="text-sm text-gray-600">
+          Mappa disponibile su desktop
+        </span>
+      </div>
+    </div>
+  )
+}
+```
+
+════════════════════════════════════════
+FIX 6 — INDEX.HTML CON LEAFLET CDN
+════════════════════════════════════════
+
+Assicurati che index.html contenga QUESTI TAG nell'head:
+
+```html
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KYD — Keep Your Dear Ones Safe</title>
+
+  <!-- LEAFLET CSS (obbligatorio prima del JS) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <!-- LEAFLET JS (deve caricare prima di React) -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/WLQ="
+    crossorigin=""
+  ></script>
+
+  <!-- Fix icone Leaflet su Vite/Webpack -->
+  <script>
+    // Fix per marker icons con bundler moderni
+    window.addEventListener('load', function() {
+      if (window.L) {
+        delete window.L.Icon.Default.prototype._getIconUrl;
+        window.L.Icon.Default.mergeOptions({
+          iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+          iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+          shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        });
+      }
+    });
+  </script>
+
+  <!-- Tailwind CSS via CDN (opzionale se usi PostCSS) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>
+```
+
+════════════════════════════════════════
+RIEPILOGO MODIFICHE DA APPLICARE
+════════════════════════════════════════
+
+1. CREA: src/context/AuthContext.jsx
+   → Sistema login/registrazione con localStorage
+
+2. CREA: src/pages/Login.jsx
+   → Pagina login con credenziali demo
+
+3. CREA: src/pages/Registrati.jsx
+   → Registrazione in 2 step (tipo account → dati)
+
+4. MODIFICA: src/components/Navbar.jsx
+   → Mostra nome utente se loggato, bottone Esci
+
+5. MODIFICA: src/App.jsx
+   → Aggiungi AuthProvider + route /login e /registrati
+
+6. SOSTITUISCI: src/data/mockData.js
+   → 12 caregiver con foto reali, coordinate precise, aree diverse
+
+7. SOSTITUISCI: src/pages/Ricerca.jsx
+   → Mappa con marker colorati per servizio
+   → Cerchi area operativa
+   → Filtri funzionanti (servizio, città, prezzo, disponibilità)
+   → Interazione bidirezionale lista ↔ mappa
+
+8. MODIFICA: index.html
+   → Aggiungi Leaflet CDN prima di tutto il resto
+
+════════════════════════════════════════
+TEST RAPIDO DOPO IMPLEMENTAZIONE
+════════════════════════════════════════
+
+✅ Login demo:     famiglia@demo.it / demo123
+✅ Registrazione:  prova a creare nuovo account
+✅ Mappa:          vai su /ricerca → vedi 12 marker
+✅ Filtro baby:    solo marker blu 👶
+✅ Filtro pet:     solo marker verdi 🐾
+✅ Filtro elder:   solo marker arancioni 👴
+✅ Filtro Milano:  mostra solo Navigli + Isola + Porta Romana
+✅ Filtro Roma:    mostra solo Trastevere + Parioli + EUR
+✅ Click marker:   apre popup con info + bottoni
+✅ Click card:     highlight marker + popup sulla mappa
+✅ Chat:           /chat?user=family&room=1
+```
