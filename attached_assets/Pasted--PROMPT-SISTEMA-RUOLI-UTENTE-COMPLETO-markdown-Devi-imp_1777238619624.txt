@@ -1,0 +1,1217 @@
+# 🔧 PROMPT — SISTEMA RUOLI UTENTE COMPLETO
+
+```markdown
+Devi implementare un sistema di ruoli utente completo nel sito KYD
+già esistente. Il sistema deve gestire 4 tipi di utente con
+permessi diversi e UI diversa per ognuno.
+
+════════════════════════════════════════
+I 4 RUOLI
+════════════════════════════════════════
+
+guest              → non loggato, può solo sfogliare
+family             → loggato come famiglia, può prenotare
+caregiver_pending  → ha compilato il form, attende verifica
+caregiver          → verificato, appare in mappa
+
+════════════════════════════════════════
+FILE 1 — src/utils/permissions.js
+════════════════════════════════════════
+
+CREA questo file da zero:
+
+```javascript
+// src/utils/permissions.js
+
+export const canDo = (user, action) => {
+  const role = user?.role || 'guest'
+
+  const rules = {
+    // Prenotare un caregiver
+    'book': ['family'],
+
+    // Usare la chat
+    'chat': ['family', 'caregiver', 'caregiver_pending'],
+
+    // Vedere il bottone "Prenota ora" sui profili
+    'see_book_button': ['family'],
+
+    // Vedere il bottone "Chatta" sui profili
+    'see_chat_button': ['family', 'caregiver', 'caregiver_pending'],
+
+    // Accedere al form "Diventa Caregiver"
+    'become_caregiver': ['guest', 'family'],
+
+    // Vedere le prenotazioni RICEVUTE (lato caregiver)
+    'see_received_bookings': ['caregiver', 'caregiver_pending'],
+
+    // Vedere le prenotazioni FATTE (lato famiglia)
+    'see_my_bookings': ['family'],
+
+    // Apparire nella mappa e ricerca
+    'appear_on_map': ['caregiver'],
+
+    // Modificare il proprio profilo caregiver
+    'edit_caregiver_profile': ['caregiver', 'caregiver_pending'],
+
+    // Vedere la dashboard famiglia
+    'family_dashboard': ['family'],
+
+    // Vedere la dashboard caregiver
+    'caregiver_dashboard': ['caregiver', 'caregiver_pending'],
+  }
+
+  return (rules[action] || []).includes(role)
+}
+
+// Helper per messaggi di errore personalizzati
+export const getBlockedMessage = (action) => {
+  const messages = {
+    'book': {
+      guest: 'Accedi o registrati per prenotare',
+      caregiver: 'I caregiver non possono prenotare altri caregiver',
+      caregiver_pending: 'Completa la verifica per accedere a questa funzione'
+    },
+    'chat': {
+      guest: 'Accedi per usare la chat'
+    },
+    'become_caregiver': {
+      caregiver: 'Sei già registrato come caregiver',
+      caregiver_pending: 'Il tuo profilo è già in fase di verifica'
+    }
+  }
+  return messages[action] || {}
+}
+```
+
+════════════════════════════════════════
+FILE 2 — src/context/AuthContext.jsx
+════════════════════════════════════════
+
+SOSTITUISCI COMPLETAMENTE con questa versione:
+
+```javascript
+import { createContext, useContext, useState, useEffect } from 'react'
+
+const AuthContext = createContext(null)
+
+const USERS_KEY = 'kyd_users'
+const SESSION_KEY = 'kyd_session'
+
+// Ruoli validi
+export const ROLES = {
+  GUEST: 'guest',
+  FAMILY: 'family',
+  CAREGIVER_PENDING: 'caregiver_pending',
+  CAREGIVER: 'caregiver'
+}
+
+// Utenti demo pre-caricati
+const DEMO_USERS = [
+  {
+    id: 'u1',
+    email: 'famiglia@demo.it',
+    password: 'demo123',
+    name: 'Marco Rossi',
+    role: 'family',
+    avatar: '👨‍👩‍👧',
+    city: 'Milano',
+    createdAt: '2024-01-01'
+  },
+  {
+    id: 'u2',
+    email: 'caregiver@demo.it',
+    password: 'demo123',
+    name: 'Sara Martinelli',
+    role: 'caregiver',
+    avatar: '👩‍⚕️',
+    city: 'Milano',
+    caregiverId: '1', // collega al mockData
+    createdAt: '2024-01-01'
+  },
+  {
+    id: 'u3',
+    email: 'pending@demo.it',
+    password: 'demo123',
+    name: 'Luca Bianchi',
+    role: 'caregiver_pending',
+    avatar: '👤',
+    city: 'Roma',
+    createdAt: '2024-01-01'
+  }
+]
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    // Inizializza DB utenti se vuoto
+    const existing = localStorage.getItem(USERS_KEY)
+    if (!existing) {
+      localStorage.setItem(USERS_KEY, JSON.stringify(DEMO_USERS))
+    }
+    // Ripristina sessione
+    const session = localStorage.getItem(SESSION_KEY)
+    if (session) {
+      try {
+        setUser(JSON.parse(session))
+      } catch {
+        localStorage.removeItem(SESSION_KEY)
+      }
+    }
+    setLoading(false)
+  }, [])
+
+  const getUsers = () => {
+    try {
+      return JSON.parse(localStorage.getItem(USERS_KEY) || '[]')
+    } catch {
+      return []
+    }
+  }
+
+  const saveSession = (userData) => {
+    const { password: _, ...safeUser } = userData
+    setUser(safeUser)
+    localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser))
+    return safeUser
+  }
+
+  // ─── LOGIN ────────────────────────────────────────────
+  const login = (email, password) => {
+    const users = getUsers()
+    const found = users.find(
+      u => u.email.toLowerCase() === email.toLowerCase()
+        && u.password === password
+    )
+    if (!found) {
+      return { success: false, error: 'Email o password errati' }
+    }
+    const safeUser = saveSession(found)
+    return { success: true, user: safeUser }
+  }
+
+  // ─── REGISTRAZIONE ───────────────────────────────────
+  const register = (data) => {
+    const users = getUsers()
+
+    if (users.find(
+      u => u.email.toLowerCase() === data.email.toLowerCase()
+    )) {
+      return { success: false, error: 'Email già registrata' }
+    }
+
+    const newUser = {
+      id: 'u' + Date.now(),
+      email: data.email,
+      password: data.password,
+      name: data.name,
+      // Se si registra come caregiver parte come pending
+      role: data.role === 'caregiver'
+        ? 'caregiver_pending'
+        : 'family',
+      avatar: data.role === 'caregiver' ? '👤' : '👨‍👩‍👧',
+      city: data.city || '',
+      previousRole: null,
+      caregiverId: null,
+      createdAt: new Date().toISOString()
+    }
+
+    users.push(newUser)
+    localStorage.setItem(USERS_KEY, JSON.stringify(users))
+    const safeUser = saveSession(newUser)
+    return { success: true, user: safeUser }
+  }
+
+  // ─── UPGRADE A CAREGIVER PENDING ─────────────────────
+  // Usato quando una famiglia vuole diventare anche caregiver
+  const upgradeToCaregiver = () => {
+    if (!user) return { success: false, error: 'Non loggato' }
+    if (user.role === 'caregiver' || user.role === 'caregiver_pending') {
+      return { success: false, error: 'Sei già un caregiver' }
+    }
+
+    const users = getUsers()
+    const idx = users.findIndex(u => u.id === user.id)
+    if (idx === -1) return { success: false, error: 'Utente non trovato' }
+
+    users[idx].previousRole = user.role
+    users[idx].role = 'caregiver_pending'
+    localStorage.setItem(USERS_KEY, JSON.stringify(users))
+
+    const updated = { ...user, role: 'caregiver_pending',
+                      previousRole: user.role }
+    setUser(updated)
+    localStorage.setItem(SESSION_KEY, JSON.stringify(updated))
+
+    return { success: true }
+  }
+
+  // ─── COLLEGA PROFILO CAREGIVER ALL'UTENTE ─────────────
+  // Chiamato dopo completamento form DiventaCaregiver
+  const linkCaregiverProfile = (caregiverId) => {
+    if (!user) return
+
+    const users = getUsers()
+    const idx = users.findIndex(u => u.id === user.id)
+    if (idx !== -1) {
+      users[idx].caregiverId = caregiverId
+      users[idx].role = 'caregiver_pending'
+      localStorage.setItem(USERS_KEY, JSON.stringify(users))
+    }
+
+    const updated = {
+      ...user,
+      caregiverId,
+      role: 'caregiver_pending'
+    }
+    setUser(updated)
+    localStorage.setItem(SESSION_KEY, JSON.stringify(updated))
+  }
+
+  // ─── LOGOUT ───────────────────────────────────────────
+  const logout = () => {
+    setUser(null)
+    localStorage.removeItem(SESSION_KEY)
+  }
+
+  // ─── HELPERS RUOLO ────────────────────────────────────
+  const isGuest = !user
+  const isFamily = user?.role === 'family'
+  const isCaregiver = user?.role === 'caregiver'
+  const isPending = user?.role === 'caregiver_pending'
+  const isAnyCaregiver = isCaregiver || isPending
+
+  return (
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      login,
+      register,
+      logout,
+      upgradeToCaregiver,
+      linkCaregiverProfile,
+      isGuest,
+      isFamily,
+      isCaregiver,
+      isPending,
+      isAnyCaregiver
+    }}>
+      {!loading && children}
+    </AuthContext.Provider>
+  )
+}
+
+export const useAuth = () => useContext(AuthContext)
+```
+
+════════════════════════════════════════
+FILE 3 — src/components/Navbar.jsx
+════════════════════════════════════════
+
+SOSTITUISCI COMPLETAMENTE:
+
+```javascript
+import { useState, useEffect } from 'react'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { canDo } from '../utils/permissions'
+
+export default function Navbar() {
+  const { user, logout, isFamily, isCaregiver,
+          isPending, isAnyCaregiver } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+
+  useEffect(() => {
+    const handler = () => setScrolled(window.scrollY > 10)
+    window.addEventListener('scroll', handler)
+    return () => window.removeEventListener('scroll', handler)
+  }, [])
+
+  // Chiudi menu su cambio route
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [location.pathname])
+
+  const handleLogout = () => {
+    logout()
+    navigate('/')
+  }
+
+  // ─── LINKS IN BASE AL RUOLO ────────────────────────
+  const getNavLinks = () => {
+    if (!user) {
+      // GUEST
+      return [
+        { to: '/come-funziona', label: 'Come funziona' },
+        { to: '/ricerca', label: '🔍 Trova caregiver' },
+        { to: '/sicurezza', label: 'Sicurezza' },
+        { to: '/prezzi', label: 'Prezzi' },
+      ]
+    }
+    if (isFamily) {
+      // FAMIGLIA
+      return [
+        { to: '/ricerca', label: '🔍 Cerca caregiver' },
+        { to: '/chat', label: '💬 Messaggi' },
+        { to: '/le-mie-prenotazioni', label: '📅 Prenotazioni' },
+      ]
+    }
+    if (isAnyCaregiver) {
+      // CAREGIVER (anche pending)
+      return [
+        { to: '/dashboard-caregiver', label: '📊 Dashboard' },
+        { to: '/chat', label: '💬 Messaggi' },
+        { to: '/prenotazioni-ricevute', label: '📅 Prenotazioni' },
+      ]
+    }
+    return []
+  }
+
+  // ─── BADGE RUOLO ───────────────────────────────────
+  const getRoleBadge = () => {
+    if (isFamily) return {
+      label: 'Famiglia',
+      color: 'bg-blue-100 text-blue-700'
+    }
+    if (isCaregiver) return {
+      label: '✅ Caregiver',
+      color: 'bg-green-100 text-green-700'
+    }
+    if (isPending) return {
+      label: '⏳ In verifica',
+      color: 'bg-amber-100 text-amber-700'
+    }
+    return null
+  }
+
+  const badge = getRoleBadge()
+  const navLinks = getNavLinks()
+
+  return (
+    <>
+      <nav className={`fixed top-0 left-0 right-0 z-50 bg-white transition-shadow
+                       duration-300 ${scrolled ? 'shadow-md' : 'shadow-none'}
+                       border-b border-gray-100`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+
+            {/* LOGO */}
+            <Link to="/" className="flex items-center gap-2 flex-shrink-0">
+              <span className="text-3xl">🛡️</span>
+              <span className="font-bold text-blue-600 text-xl">KYD</span>
+            </Link>
+
+            {/* LINKS DESKTOP */}
+            <div className="hidden md:flex items-center gap-1">
+              {navLinks.map(link => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium
+                              transition-colors ${
+                    location.pathname === link.to
+                      ? 'bg-blue-50 text-blue-600'
+                      : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+
+            {/* DESTRA — AUTH BUTTONS O USER MENU */}
+            <div className="hidden md:flex items-center gap-3">
+
+              {!user ? (
+                // GUEST → bottoni login/registrazione
+                <>
+                  {/* Link diventa caregiver solo per guest */}
+                  <Link
+                    to="/diventa-caregiver"
+                    className="text-sm text-gray-500 hover:text-green-600
+                               transition px-3 py-2 rounded-xl hover:bg-green-50"
+                  >
+                    Diventa caregiver
+                  </Link>
+                  <Link
+                    to="/login"
+                    className="text-sm font-medium text-gray-700
+                               hover:text-blue-600 px-4 py-2 rounded-xl
+                               border border-gray-200 hover:border-blue-300
+                               transition"
+                  >
+                    Accedi
+                  </Link>
+                  <Link
+                    to="/registrati"
+                    className="text-sm font-semibold text-white bg-blue-600
+                               hover:bg-blue-700 px-4 py-2 rounded-xl transition
+                               shadow-sm"
+                  >
+                    Registrati gratis
+                  </Link>
+                </>
+              ) : (
+                // LOGGATO → menu utente
+                <div className="flex items-center gap-3">
+
+                  {/* Badge ruolo */}
+                  {badge && (
+                    <span className={`text-xs px-3 py-1 rounded-full
+                                      font-semibold ${badge.color}`}>
+                      {badge.label}
+                    </span>
+                  )}
+
+                  {/* Avatar + nome */}
+                  <div className="flex items-center gap-2 bg-gray-50
+                                  border border-gray-200 px-3 py-2
+                                  rounded-xl">
+                    <span className="text-xl">
+                      {user.avatar || '👤'}
+                    </span>
+                    <div className="hidden lg:block">
+                      <div className="text-sm font-semibold text-gray-900
+                                      leading-none">
+                        {user.name.split(' ')[0]}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Diventa caregiver (solo per famiglia) */}
+                  {isFamily && (
+                    <Link
+                      to="/diventa-caregiver"
+                      className="text-xs font-medium text-green-600
+                                 hover:text-green-700 px-3 py-2 rounded-xl
+                                 border border-green-200 hover:bg-green-50
+                                 transition"
+                    >
+                      + Diventa caregiver
+                    </Link>
+                  )}
+
+                  {/* Logout */}
+                  <button
+                    onClick={handleLogout}
+                    className="text-sm text-gray-400 hover:text-red-500
+                               transition px-3 py-2 rounded-xl
+                               hover:bg-red-50"
+                  >
+                    Esci
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* HAMBURGER MOBILE */}
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="md:hidden p-2 rounded-xl text-gray-600
+                         hover:bg-gray-100 transition"
+            >
+              <div className="w-6 flex flex-col gap-1.5">
+                <span className={`block h-0.5 bg-current transition-transform
+                                  duration-300 ${
+                  menuOpen ? 'rotate-45 translate-y-2' : ''
+                }`}/>
+                <span className={`block h-0.5 bg-current transition-opacity
+                                  duration-300 ${
+                  menuOpen ? 'opacity-0' : ''
+                }`}/>
+                <span className={`block h-0.5 bg-current transition-transform
+                                  duration-300 ${
+                  menuOpen ? '-rotate-45 -translate-y-2' : ''
+                }`}/>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* MENU MOBILE DRAWER */}
+        {menuOpen && (
+          <div className="md:hidden bg-white border-t border-gray-100
+                          shadow-xl">
+            <div className="px-4 py-4 space-y-2">
+
+              {/* Info utente mobile */}
+              {user && (
+                <div className="flex items-center gap-3 p-3 bg-gray-50
+                                rounded-xl mb-4">
+                  <span className="text-3xl">{user.avatar || '👤'}</span>
+                  <div>
+                    <div className="font-semibold text-gray-900">
+                      {user.name}
+                    </div>
+                    {badge && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full
+                                        font-medium ${badge.color}`}>
+                        {badge.label}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Links */}
+              {navLinks.map(link => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className="block px-4 py-3 rounded-xl text-sm font-medium
+                             text-gray-700 hover:bg-blue-50 hover:text-blue-600
+                             transition"
+                >
+                  {link.label}
+                </Link>
+              ))}
+
+              <div className="border-t border-gray-100 pt-3 mt-3 space-y-2">
+                {!user ? (
+                  <>
+                    <Link to="/diventa-caregiver"
+                          className="block px-4 py-3 rounded-xl text-sm
+                                     font-medium text-green-600
+                                     hover:bg-green-50 transition">
+                      🏅 Diventa caregiver
+                    </Link>
+                    <Link to="/login"
+                          className="block px-4 py-3 rounded-xl text-sm
+                                     font-medium text-gray-700
+                                     hover:bg-gray-50 transition border
+                                     border-gray-200 text-center">
+                      Accedi
+                    </Link>
+                    <Link to="/registrati"
+                          className="block px-4 py-3 rounded-xl text-sm
+                                     font-semibold text-white bg-blue-600
+                                     hover:bg-blue-700 transition text-center">
+                      Registrati gratis
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    {isFamily && (
+                      <Link to="/diventa-caregiver"
+                            className="block px-4 py-3 rounded-xl text-sm
+                                       font-medium text-green-600
+                                       hover:bg-green-50 transition border
+                                       border-green-200 text-center">
+                        🏅 Diventa anche caregiver
+                      </Link>
+                    )}
+                    <button
+                      onClick={handleLogout}
+                      className="w-full px-4 py-3 rounded-xl text-sm
+                                 font-medium text-red-500 hover:bg-red-50
+                                 transition text-left"
+                    >
+                      🚪 Esci dall'account
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </nav>
+
+      {/* SPACER per contenuto sotto navbar fixed */}
+      <div className="h-16" />
+
+      {/* BANNER CAREGIVER PENDING */}
+      {isPending && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center gap-3">
+            <span className="text-xl">⏳</span>
+            <div className="flex-1">
+              <span className="text-sm font-semibold text-amber-800">
+                Il tuo profilo caregiver è in fase di verifica.
+              </span>
+              <span className="text-sm text-amber-600 ml-2">
+                Riceverai una notifica entro 24-48 ore.
+              </span>
+            </div>
+            <Link
+              to="/dashboard-caregiver"
+              className="text-xs font-bold text-amber-700 hover:underline
+                         flex-shrink-0"
+            >
+              Vedi stato →
+            </Link>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+```
+
+════════════════════════════════════════
+FILE 4 — src/components/ProtectedAction.jsx
+════════════════════════════════════════
+
+CREA questo componente che blocca azioni non permesse:
+
+```javascript
+// src/components/ProtectedAction.jsx
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { canDo, getBlockedMessage } from '../utils/permissions'
+
+// Componente wrapper che blocca azioni non permesse
+// e mostra il messaggio corretto
+export default function ProtectedAction({
+  action,          // 'book' | 'chat' | 'become_caregiver' | ...
+  children,        // il bottone/elemento da proteggere
+  onBlocked,       // callback opzionale quando bloccato
+  redirectTo,      // dove mandare se guest (default: /login)
+}) {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+
+  const allowed = canDo(user, action)
+
+  const handleClick = (e) => {
+    if (!allowed) {
+      e.preventDefault()
+      e.stopPropagation()
+
+      const role = user?.role || 'guest'
+      const messages = getBlockedMessage(action)
+      const message = messages[role] || 'Non hai i permessi per questa azione'
+
+      if (onBlocked) {
+        onBlocked(message)
+      } else if (!user) {
+        // Guest → vai al login
+        navigate(redirectTo || '/login')
+      } else {
+        alert(message) // fallback semplice
+      }
+    }
+  }
+
+  return (
+    <div onClick={handleClick} className="contents">
+      {children}
+    </div>
+  )
+}
+
+// ─── HOOK ALTERNATIVO ──────────────────────────────────────
+// Se preferisci usarlo come hook invece che come componente:
+export function usePermission(action) {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+
+  const allowed = canDo(user, action)
+
+  const checkAndRun = (callback) => {
+    if (!allowed) {
+      if (!user) {
+        navigate('/login')
+      }
+      return false
+    }
+    callback?.()
+    return true
+  }
+
+  return { allowed, checkAndRun }
+}
+```
+
+════════════════════════════════════════
+FILE 5 — src/pages/ProfiloCaregiver.jsx
+════════════════════════════════════════
+
+AGGIORNA la sidebar con i bottoni condizionali:
+
+```javascript
+// Aggiungi questi import in cima:
+import { useAuth } from '../context/AuthContext'
+import { canDo } from '../utils/permissions'
+import { usePermission } from '../components/ProtectedAction'
+
+// Dentro il componente ProfiloCaregiver:
+const { user } = useAuth()
+const navigate = useNavigate()
+
+// Hook per i permessi
+const { checkAndRun: checkBook } = usePermission('book')
+const { checkAndRun: checkChat } = usePermission('chat')
+
+// Non mostrare la sidebar "prenota" se stai guardando
+// il TUO profilo caregiver
+const isMyProfile = user?.caregiverId === caregiver?.id
+
+// ─── SIDEBAR STICKY ────────────────────────────────────────
+// Sostituisci la sidebar con questa versione:
+
+<div className="sticky top-24 space-y-4">
+
+  {/* Prezzo */}
+  <div className="bg-white rounded-2xl border shadow-sm p-5">
+    <div className="flex items-baseline gap-1 mb-1">
+      <span className="text-3xl font-bold text-gray-900">
+        €{caregiver.hourlyRate}
+      </span>
+      <span className="text-gray-500">/ora</span>
+    </div>
+
+    {/* Commissione */}
+    <div className="text-xs text-gray-400 mb-4">
+      + €{(caregiver.hourlyRate * 0.15).toFixed(2)} commissione KYD (15%)
+    </div>
+
+    {/* Disponibilità */}
+    <div className={`inline-flex items-center gap-2 px-3 py-1.5
+                     rounded-full text-sm font-semibold mb-4 ${
+      caregiver.available
+        ? 'bg-green-100 text-green-700'
+        : 'bg-gray-100 text-gray-500'
+    }`}>
+      <span className={`w-2 h-2 rounded-full ${
+        caregiver.available ? 'bg-green-500' : 'bg-gray-400'
+      }`}/>
+      {caregiver.available ? 'Disponibile ora' : 'Non disponibile'}
+    </div>
+
+    {/* ─── BOTTONI CONDIZIONALI PER RUOLO ─── */}
+
+    {/* CASO 1: GUEST → invita a registrarsi */}
+    {!user && (
+      <div className="space-y-3">
+        <div className="bg-blue-50 border border-blue-200 rounded-xl
+                        p-3 text-center">
+          <p className="text-sm text-blue-700 font-medium mb-2">
+            Registrati per prenotare gratuitamente
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/registrati')}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white
+                     font-bold py-3.5 rounded-xl transition shadow-sm"
+        >
+          Registrati gratis
+        </button>
+        <button
+          onClick={() => navigate('/login')}
+          className="w-full border-2 border-gray-200 text-gray-600
+                     hover:bg-gray-50 font-semibold py-3 rounded-xl
+                     transition"
+        >
+          Hai già un account? Accedi
+        </button>
+      </div>
+    )}
+
+    {/* CASO 2: FAMIGLIA → può prenotare e chattare */}
+    {user?.role === 'family' && (
+      <div className="space-y-3">
+        <button
+          onClick={() => checkBook(() => navigate(`/prenota/${caregiver.id}`))}
+          disabled={!caregiver.available}
+          className="w-full bg-blue-600 hover:bg-blue-700
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     text-white font-bold py-3.5 rounded-xl transition
+                     shadow-sm"
+        >
+          📅 Prenota ora
+        </button>
+        <button
+          onClick={() => checkChat(() =>
+            navigate(`/chat?room=${caregiver.id}&user=family`)
+          )}
+          className="w-full bg-green-500 hover:bg-green-600 text-white
+                     font-bold py-3 rounded-xl transition"
+        >
+          💬 Scrivi a {caregiver.name.split(' ')[0]}
+        </button>
+      </div>
+    )}
+
+    {/* CASO 3: IL PROPRIO PROFILO CAREGIVER */}
+    {isMyProfile && (
+      <div className="space-y-3">
+        <div className="bg-green-50 border border-green-200 rounded-xl
+                        p-3 text-center">
+          <p className="text-sm text-green-700 font-semibold">
+            👋 Questo è il tuo profilo!
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/dashboard-caregiver')}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white
+                     font-bold py-3.5 rounded-xl transition"
+        >
+          📊 Vai alla tua dashboard
+        </button>
+        <button
+          onClick={() => navigate(
+            `/chat?room=${caregiver.id}&user=caregiver`
+          )}
+          className="w-full border-2 border-gray-200 text-gray-600
+                     hover:bg-gray-50 font-semibold py-3 rounded-xl
+                     transition"
+        >
+          💬 I tuoi messaggi
+        </button>
+      </div>
+    )}
+
+    {/* CASO 4: ALTRO CAREGIVER guarda profilo altrui */}
+    {user && (user.role === 'caregiver' || user.role === 'caregiver_pending')
+     && !isMyProfile && (
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4
+                      text-center">
+        <p className="text-sm text-gray-500">
+          Solo le famiglie possono prenotare i caregiver.
+        </p>
+        <p className="text-xs text-gray-400 mt-1">
+          Sei loggato come caregiver.
+        </p>
+      </div>
+    )}
+
+    {/* CASO 5: PENDING → può solo chattare */}
+    {user?.role === 'caregiver_pending' && !isMyProfile && (
+      <button
+        onClick={() => navigate(`/chat?room=${caregiver.id}&user=caregiver`)}
+        className="w-full bg-green-500 hover:bg-green-600 text-white
+                   font-bold py-3 rounded-xl transition mt-2"
+      >
+        💬 Contatta
+      </button>
+    )}
+  </div>
+
+  {/* Garanzie (sempre visibili) */}
+  <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-2">
+    <div className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+      Garanzie KYD
+    </div>
+    {[
+      { icon: '✅', text: 'Identità verificata' },
+      { icon: '🛡️', text: 'Assicurazione RC inclusa' },
+      { icon: '💳', text: 'Pagamento sicuro Stripe' },
+      { icon: '↩️', text: 'Rimborso gratuito entro 24h' },
+    ].map((g, i) => (
+      <div key={i} className="flex items-center gap-2 text-sm text-gray-600">
+        <span>{g.icon}</span>
+        <span>{g.text}</span>
+      </div>
+    ))}
+  </div>
+</div>
+```
+
+════════════════════════════════════════
+FILE 6 — src/pages/DiventaCaregiver.jsx
+════════════════════════════════════════
+
+AGGIUNGI all'inizio del componente questo controllo:
+
+```javascript
+// Aggiungi import
+import { useAuth } from '../context/AuthContext'
+import { canDo } from '../utils/permissions'
+
+// Dentro DiventaCaregiver():
+const { user, upgradeToCaregiver, linkCaregiverProfile } = useAuth()
+const navigate = useNavigate()
+
+// ─── BLOCCO SE GIÀ CAREGIVER ──────────────────────────────
+// Mostra schermata diversa se l'utente non può diventare caregiver
+if (user && !canDo(user, 'become_caregiver')) {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border shadow-sm p-10 max-w-md
+                      text-center">
+        <span className="text-6xl block mb-4">
+          {user.role === 'caregiver' ? '✅' : '⏳'}
+        </span>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">
+          {user.role === 'caregiver'
+            ? 'Sei già un caregiver verificato!'
+            : 'Profilo in fase di verifica'}
+        </h2>
+        <p className="text-gray-500 text-sm mb-6">
+          {user.role === 'caregiver'
+            ? 'Il tuo profilo è attivo e visibile alle famiglie.'
+            : 'Il tuo profilo è in revisione. Riceverai una notifica entro 24-48h.'}
+        </p>
+        <button
+          onClick={() => navigate('/dashboard-caregiver')}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white
+                     font-bold py-3 rounded-xl transition"
+        >
+          Vai alla tua dashboard
+        </button>
+        <button
+          onClick={() => navigate('/')}
+          className="w-full mt-3 border-2 border-gray-200 text-gray-600
+                     font-semibold py-3 rounded-xl transition hover:bg-gray-50"
+        >
+          Torna alla Home
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── SE È UNA FAMIGLIA che vuole diventare caregiver ──────
+// Mostra banner informativo prima del form
+const isFamilyUpgrading = user?.role === 'family'
+
+// Nel return, PRIMA del form (step 1), aggiungi:
+{isFamilyUpgrading && step === 1 && (
+  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-6">
+    <div className="flex items-center gap-3">
+      <span className="text-2xl">ℹ️</span>
+      <div>
+        <div className="font-semibold text-blue-800 text-sm">
+          Stai aggiungendo il ruolo Caregiver al tuo account
+        </div>
+        <div className="text-xs text-blue-600 mt-0.5">
+          Potrai continuare a usare KYD anche come famiglia.
+          Il tuo account avrà entrambi i ruoli.
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+// ─── MODIFICA handleSubmit ────────────────────────────────
+// Alla fine di handleSubmit, dopo saveNewCaregiver:
+const handleSubmit = async () => {
+  setLoading(true)
+  await new Promise(r => setTimeout(r, 2000))
+
+  // ... tutto il codice esistente per creare newCaregiver ...
+
+  saveNewCaregiver(newCaregiver)
+
+  // Se era una famiglia, fai upgrade del ruolo
+  if (user?.role === 'family') {
+    upgradeToCaregiver()
+  }
+
+  // Collega il profilo caregiver all'utente
+  linkCaregiverProfile(newCaregiver.id)
+
+  setLoading(false)
+  setStep(6)
+}
+```
+
+════════════════════════════════════════
+FILE 7 — src/pages/Registrati.jsx
+════════════════════════════════════════
+
+AGGIORNA il testo della scelta ruolo per chiarire il flusso:
+
+```javascript
+// Nella schermata Step 1 (scelta tipo account),
+// aggiorna le descrizioni dei pulsanti:
+
+// Pulsante FAMIGLIA:
+<button onClick={() => handleRoleSelect('family')} ...>
+  <span className="text-4xl">👨‍👩‍👧</span>
+  <div>
+    <div className="font-bold">Sono una Famiglia</div>
+    <div className="text-sm text-gray-500 mt-1">
+      Cerco babysitter, pet-sitter o badanti verificati.
+      Posso diventare caregiver in seguito.
+    </div>
+  </div>
+</button>
+
+// Pulsante CAREGIVER:
+<button onClick={() => handleRoleSelect('caregiver')} ...>
+  <span className="text-4xl">🏅</span>
+  <div>
+    <div className="font-bold">Sono un Caregiver</div>
+    <div className="text-sm text-gray-500 mt-1">
+      Offro servizi di assistenza. Compilerai un breve
+      profilo nel passo successivo.
+    </div>
+  </div>
+  {/* Badge "verificato in 24h" */}
+  <span className="ml-auto text-xs bg-amber-100 text-amber-700
+                   px-2 py-1 rounded-full font-medium flex-shrink-0">
+    ⏳ Verifica 24h
+  </span>
+</button>
+
+// ─── AGGIORNA handleRoleSelect ────────────────────────────
+const handleRoleSelect = (selectedRole) => {
+  setRole(selectedRole)
+  if (selectedRole === 'caregiver') {
+    // Caregiver → vai prima al form registrazione base
+    // poi redirect automatico a /diventa-caregiver
+    setStep(2)
+    // Salva flag per redirect post-registrazione
+    sessionStorage.setItem('redirect_after_register', '/diventa-caregiver')
+  } else {
+    setStep(2)
+  }
+}
+
+// ─── AGGIORNA handleSubmit di Registrati ─────────────────
+const handleSubmit = async (e) => {
+  e.preventDefault()
+  // ... validazione ...
+
+  const result = register({ ...form, role })
+  if (result.success) {
+    // Controlla se c'è un redirect salvato
+    const redirect = sessionStorage.getItem('redirect_after_register')
+    sessionStorage.removeItem('redirect_after_register')
+
+    if (redirect) {
+      navigate(redirect)  // → /diventa-caregiver
+    } else {
+      navigate('/')
+    }
+  }
+}
+```
+
+════════════════════════════════════════
+FILE 8 — src/pages/Login.jsx
+════════════════════════════════════════
+
+AGGIORNA handleSubmit per redirect intelligente post-login:
+
+```javascript
+const handleSubmit = async (e) => {
+  e.preventDefault()
+  setLoading(true)
+
+  await new Promise(r => setTimeout(r, 800))
+  const result = login(form.email, form.password)
+  setLoading(false)
+
+  if (result.success) {
+    const { role } = result.user
+
+    // Redirect in base al ruolo
+    if (role === 'caregiver' || role === 'caregiver_pending') {
+      navigate('/dashboard-caregiver')
+    } else if (role === 'family') {
+      navigate('/')
+    } else {
+      navigate('/')
+    }
+  } else {
+    setError(result.error)
+  }
+}
+
+// ─── AGGIORNA il box credenziali demo ─────────────────────
+// Mostra tutti e 3 gli utenti demo:
+<div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+  <p className="text-sm font-semibold text-blue-800 mb-3">
+    🎓 Account Demo
+  </p>
+  <div className="space-y-2">
+    {[
+      {
+        label: '👨‍👩‍👧 Famiglia',
+        email: 'famiglia@demo.it',
+        password: 'demo123',
+        role: 'Può prenotare caregiver'
+      },
+      {
+        label: '✅ Caregiver',
+        email: 'caregiver@demo.it',
+        password: 'demo123',
+        role: 'Profilo verificato attivo'
+      },
+      {
+        label: '⏳ In verifica',
+        email: 'pending@demo.it',
+        password: 'demo123',
+        role: 'Profilo in attesa verifica'
+      }
+    ].map(u => (
+      <button
+        key={u.email}
+        onClick={() => setForm({
+          email: u.email, password: u.password
+        })}
+        className="w-full text-left p-2 rounded-lg hover:bg-blue-100
+                   transition text-xs border border-blue-100"
+      >
+        <div className="font-semibold text-blue-800">{u.label}</div>
+        <div className="text-blue-600">{u.email}</div>
+        <div className="text-blue-400">{u.role}</div>
+      </button>
+    ))}
+  </div>
+  <p className="text-xs text-blue-500 mt-2">
+    👆 Clicca un account per compilare automaticamente
+  </p>
+</div>
+```
+
+════════════════════════════════════════
+RIEPILOGO FLUSSI COMPLETI
+════════════════════════════════════════
+
+FLUSSO 1 — GUEST vuole prenotare:
+  /ricerca → clicca "Prenota" → redirect /login
+  → accede → torna al profilo → può prenotare ✅
+
+FLUSSO 2 — Nuova FAMIGLIA:
+  /registrati → sceglie "Famiglia" → compila dati
+  → loggato come family → navbar mostra
+  "Cerca caregiver | Chat | Prenotazioni"
+  → In navbar vede "+ Diventa caregiver" ✅
+
+FLUSSO 3 — FAMIGLIA vuole diventare CAREGIVER:
+  Clicca "+ Diventa caregiver" in navbar
+  → /diventa-caregiver → vede banner "stai aggiungendo ruolo"
+  → compila form 6 step → ruolo diventa caregiver_pending
+  → banner giallo in cima al sito ✅
+
+FLUSSO 4 — Nuovo CAREGIVER da zero:
+  /registrati → sceglie "Caregiver" → compila dati base
+  → redirect automatico a /diventa-caregiver
+  → compila form 6 step → caregiver_pending ✅
+
+FLUSSO 5 — CAREGIVER guarda profilo altrui:
+  Vede il profilo ma NON vede "Prenota"
+  Vede invece: "Solo le famiglie possono prenotare" ✅
+
+FLUSSO 6 — CAREGIVER guarda il PROPRIO profilo:
+  Vede: "Questo è il tuo profilo!"
+  Bottoni: "Dashboard" e "I tuoi messaggi" ✅
+
+════════════════════════════════════════
+TEST RAPIDO
+════════════════════════════════════════
+
+1. Login famiglia@demo.it → navbar mostra links famiglia
+   → vai su profilo caregiver → vedi "Prenota" + "Chatta"
+   → navbar mostra "+ Diventa caregiver" ✅
+
+2. Login caregiver@demo.it → navbar mostra links caregiver
+   → vai su profilo altrui → vedi "Solo famiglie possono prenotare"
+   → vai sul TUO profilo → vedi "Questo è il tuo profilo!" ✅
+
+3. Login pending@demo.it → banner giallo in cima
+   → "Profilo in verifica" ovunque ✅
+
+4. Senza login → clicca "Prenota" → redirect /login ✅
+
+5. Registrati come famiglia → "+ Diventa caregiver"
+   → form 6 step → ruolo diventa caregiver_pending ✅
+```

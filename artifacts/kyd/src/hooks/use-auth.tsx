@@ -1,6 +1,13 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
-export type UserRole = "family" | "caregiver";
+export type UserRole = "family" | "caregiver" | "caregiver_pending";
 
 export interface StoredUser {
   id: string;
@@ -9,6 +16,8 @@ export interface StoredUser {
   name: string;
   role: UserRole;
   city: string;
+  caregiverId: string | null;
+  previousRole: UserRole | null;
   createdAt: string;
 }
 
@@ -24,7 +33,7 @@ interface RegisterInput {
   name: string;
   email: string;
   password: string;
-  role: UserRole;
+  role: "family" | "caregiver";
   city: string;
 }
 
@@ -34,10 +43,17 @@ interface AuthContextValue {
   login: (email: string, password: string) => AuthResult;
   register: (data: RegisterInput) => AuthResult;
   logout: () => void;
+  upgradeToCaregiver: () => AuthResult;
+  linkCaregiverProfile: (caregiverId: string) => void;
+  isGuest: boolean;
+  isFamily: boolean;
+  isCaregiver: boolean;
+  isPending: boolean;
+  isAnyCaregiver: boolean;
 }
 
-const USERS_KEY = "kyd_users";
-const SESSION_KEY = "kyd_session";
+const USERS_KEY = "kyd_users_v2";
+const SESSION_KEY = "kyd_session_v2";
 
 const DEMO_USERS: StoredUser[] = [
   {
@@ -47,6 +63,8 @@ const DEMO_USERS: StoredUser[] = [
     name: "Marco Rossi",
     role: "family",
     city: "Milano",
+    caregiverId: null,
+    previousRole: null,
     createdAt: new Date("2024-01-01").toISOString(),
   },
   {
@@ -56,6 +74,19 @@ const DEMO_USERS: StoredUser[] = [
     name: "Sara Martinelli",
     role: "caregiver",
     city: "Milano",
+    caregiverId: "giulia-rossi",
+    previousRole: null,
+    createdAt: new Date("2024-01-01").toISOString(),
+  },
+  {
+    id: "u-demo-pending",
+    email: "pending@demo.it",
+    password: "demo123",
+    name: "Luca Bianchi",
+    role: "caregiver_pending",
+    city: "Roma",
+    caregiverId: null,
+    previousRole: null,
     createdAt: new Date("2024-01-01").toISOString(),
   },
 ];
@@ -80,6 +111,14 @@ function writeUsers(users: StoredUser[]) {
 function toSafe(user: StoredUser): SafeUser {
   const { password: _password, ...rest } = user;
   return rest;
+}
+
+function persistSession(user: SafeUser | null) {
+  if (user) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(SESSION_KEY);
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -111,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const safe = toSafe(found);
     setUser(safe);
-    localStorage.setItem(SESSION_KEY, JSON.stringify(safe));
+    persistSession(safe);
     return { success: true, user: safe };
   };
 
@@ -125,28 +164,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: data.email,
       password: data.password,
       name: data.name,
-      role: data.role,
+      role: data.role === "caregiver" ? "caregiver_pending" : "family",
       city: data.city,
+      caregiverId: null,
+      previousRole: null,
       createdAt: new Date().toISOString(),
     };
     users.push(newUser);
     writeUsers(users);
     const safe = toSafe(newUser);
     setUser(safe);
-    localStorage.setItem(SESSION_KEY, JSON.stringify(safe));
+    persistSession(safe);
     return { success: true, user: safe };
+  };
+
+  const upgradeToCaregiver = (): AuthResult => {
+    if (!user) return { success: false, error: "Non sei autenticato" };
+    if (user.role !== "family") {
+      return { success: false, error: "Sei già un caregiver" };
+    }
+    const users = readUsers();
+    const idx = users.findIndex((u) => u.id === user.id);
+    if (idx === -1) return { success: false, error: "Utente non trovato" };
+    users[idx].previousRole = user.role;
+    users[idx].role = "caregiver_pending";
+    writeUsers(users);
+    const updated: SafeUser = { ...user, role: "caregiver_pending", previousRole: user.role };
+    setUser(updated);
+    persistSession(updated);
+    return { success: true, user: updated };
+  };
+
+  const linkCaregiverProfile = (caregiverId: string): void => {
+    if (!user) return;
+    const users = readUsers();
+    const idx = users.findIndex((u) => u.id === user.id);
+    if (idx !== -1) {
+      users[idx].caregiverId = caregiverId;
+      if (users[idx].role === "family") {
+        users[idx].previousRole = "family";
+        users[idx].role = "caregiver_pending";
+      }
+      writeUsers(users);
+    }
+    const updated: SafeUser = {
+      ...user,
+      caregiverId,
+      role: user.role === "family" ? "caregiver_pending" : user.role,
+      previousRole:
+        user.role === "family" ? "family" : user.previousRole,
+    };
+    setUser(updated);
+    persistSession(updated);
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem(SESSION_KEY);
+    persistSession(null);
   };
 
-  return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value = useMemo<AuthContextValue>(() => {
+    const isGuest = !user;
+    const isFamily = user?.role === "family";
+    const isCaregiver = user?.role === "caregiver";
+    const isPending = user?.role === "caregiver_pending";
+    const isAnyCaregiver = isCaregiver || isPending;
+    return {
+      user,
+      loading,
+      login,
+      register,
+      logout,
+      upgradeToCaregiver,
+      linkCaregiverProfile,
+      isGuest,
+      isFamily,
+      isCaregiver,
+      isPending,
+      isAnyCaregiver,
+    };
+  }, [user, loading]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {

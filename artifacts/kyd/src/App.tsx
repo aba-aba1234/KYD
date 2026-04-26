@@ -20,6 +20,9 @@ import Chat from "@/pages/chat";
 import Book from "@/pages/book";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import MyBookings from "@/pages/my-bookings";
+import ReceivedBookings from "@/pages/received-bookings";
+import CaregiverDashboard from "@/pages/caregiver-dashboard";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -41,6 +44,9 @@ function Router() {
       <Route path="/prenota/:id" component={Book} />
       <Route path="/login" component={Login} />
       <Route path="/registrati" component={Register} />
+      <Route path="/le-mie-prenotazioni" component={MyBookings} />
+      <Route path="/prenotazioni-ricevute" component={ReceivedBookings} />
+      <Route path="/dashboard-caregiver" component={CaregiverDashboard} />
       <Route component={NotFound} />
     </Switch>
   );

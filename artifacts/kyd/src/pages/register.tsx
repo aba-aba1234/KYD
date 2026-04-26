@@ -18,7 +18,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth, type UserRole } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/use-auth";
+
+type RegisterRole = "family" | "caregiver";
 
 const CITIES = [
   "Milano",
@@ -38,7 +40,7 @@ export default function RegisterPage() {
   const { register } = useAuth();
   const [, setLocation] = useLocation();
   const [step, setStep] = useState<1 | 2>(1);
-  const [role, setRole] = useState<UserRole>("family");
+  const [role, setRole] = useState<RegisterRole>("family");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [city, setCity] = useState("");
@@ -48,7 +50,7 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const pickRole = (r: UserRole) => {
+  const pickRole = (r: RegisterRole) => {
     setRole(r);
     setStep(2);
   };
@@ -76,7 +78,11 @@ export default function RegisterPage() {
     const result = register({ name, email, password, role, city });
     setLoading(false);
     if (result.success) {
-      setLocation("/");
+      if (role === "caregiver") {
+        setLocation("/caregiver");
+      } else {
+        setLocation("/");
+      }
     } else {
       setError(result.error ?? "Registrazione non riuscita");
     }
@@ -146,9 +152,12 @@ export default function RegisterPage() {
                         Sono un Caregiver
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        Offro assistenza e voglio raggiungere nuove famiglie
+                        Offro assistenza. Compilerai il profilo nel passo successivo.
                       </div>
                     </div>
+                    <span className="text-[10px] uppercase tracking-wide font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded-full whitespace-nowrap">
+                      Verifica 24h
+                    </span>
                     <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-secondary transition-colors" />
                   </div>
                 </button>

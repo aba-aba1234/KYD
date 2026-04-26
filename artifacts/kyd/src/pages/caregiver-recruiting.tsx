@@ -34,6 +34,7 @@ import {
   type CreateCaregiverInputServicesItem,
 } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
+import { Info, Clock, LayoutDashboard } from "lucide-react";
 
 const CITIES = [
   "Milano",
@@ -59,7 +60,7 @@ type Step = 1 | 2 | 3 | 4;
 
 export default function CaregiverRecruitingPage() {
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, isFamily, isCaregiver, isPending, linkCaregiverProfile } = useAuth();
   const createCaregiver = useCreateCaregiver();
 
   const [showForm, setShowForm] = useState(false);
@@ -153,11 +154,61 @@ export default function CaregiverRecruitingPage() {
       {
         onSuccess: (data) => {
           setCreatedProfile(data);
+          if (user) {
+            linkCaregiverProfile(data.id);
+          }
           setStep(4);
         },
       }
     );
   };
+
+  // Block screen: already a caregiver or pending verification
+  if (user && (isCaregiver || isPending)) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background to-secondary/5 pt-24 pb-16 flex items-center justify-center px-4">
+        <Card className="border shadow-xl max-w-md w-full text-center">
+          <CardContent className="p-10">
+            <div
+              className={`mx-auto h-16 w-16 rounded-full flex items-center justify-center mb-5 ${
+                isCaregiver ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"
+              }`}
+            >
+              {isCaregiver ? (
+                <ShieldCheck className="h-8 w-8" />
+              ) : (
+                <Clock className="h-8 w-8" />
+              )}
+            </div>
+            <h2 className="font-serif text-2xl font-bold mb-2">
+              {isCaregiver
+                ? "Sei già un caregiver verificato"
+                : "Profilo in fase di verifica"}
+            </h2>
+            <p className="text-muted-foreground text-sm mb-8">
+              {isCaregiver
+                ? "Il tuo profilo è attivo e visibile alle famiglie."
+                : "Il tuo profilo è in revisione. Riceverai una notifica entro 24-48 ore."}
+            </p>
+            <Button
+              onClick={() => setLocation("/dashboard-caregiver")}
+              className="w-full h-11 bg-primary hover:bg-primary/90 mb-2"
+            >
+              <LayoutDashboard className="h-4 w-4 mr-2" />
+              Vai alla tua dashboard
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setLocation("/")}
+              className="w-full h-11"
+            >
+              Torna alla home
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (showForm) {
     return (
@@ -220,6 +271,20 @@ export default function CaregiverRecruitingPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
               >
+                {isFamily && (
+                  <div className="mb-6 rounded-2xl border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
+                    <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-semibold text-primary text-sm">
+                        Stai aggiungendo il ruolo Caregiver al tuo account
+                      </div>
+                      <div className="text-xs text-primary/80 mt-0.5">
+                        Potrai continuare a usare KYD anche come famiglia. Il tuo
+                        account avrà entrambi i ruoli.
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <Card className="border shadow-sm">
                   <CardContent className="p-6 space-y-5">
                     <div>
