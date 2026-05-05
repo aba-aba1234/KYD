@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Layout } from "@/components/layout";
 import { AuthProvider } from "@/hooks/use-auth";
+import ScrollToTop from "@/components/scroll-to-top";
 
 // Pages
 import Home from "@/pages/home";
@@ -23,6 +24,8 @@ import Register from "@/pages/register";
 import MyBookings from "@/pages/my-bookings";
 import ReceivedBookings from "@/pages/received-bookings";
 import CaregiverDashboard from "@/pages/caregiver-dashboard";
+import PrivacyPolicy from "@/pages/privacy-policy";
+import TermsOfService from "@/pages/terms-of-service";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -47,6 +50,8 @@ function Router() {
       <Route path="/le-mie-prenotazioni" component={MyBookings} />
       <Route path="/prenotazioni-ricevute" component={ReceivedBookings} />
       <Route path="/dashboard-caregiver" component={CaregiverDashboard} />
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/termini-di-servizio" component={TermsOfService} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -58,6 +63,7 @@ function App() {
       <AuthProvider>
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <ScrollToTop />
             <Layout>
               <Router />
             </Layout>

@@ -60,8 +60,8 @@ export function Footer() {
             <div className="flex flex-col gap-2 text-sm text-muted-foreground">
               <Link href="/chi-siamo" className="hover:text-primary transition-colors">Chi siamo</Link>
               <Link href="/contatti" className="hover:text-primary transition-colors">Contatti</Link>
-              <Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
-              <Link href="/termini" className="hover:text-primary transition-colors">Termini di Servizio</Link>
+              <Link href="/privacy-policy" className="hover:text-primary transition-colors">Privacy Policy</Link>
+              <Link href="/termini-di-servizio" className="hover:text-primary transition-colors">Termini di Servizio</Link>
             </div>
           </div>
         </div>

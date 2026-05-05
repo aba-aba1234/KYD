@@ -1,0 +1,1199 @@
+```markdown
+Implementa 3 miglioramenti nel progetto KYD esistente:
+
+1) Sistema ruoli unificato (utente unico che può fare tutto)
+2) Pagine Privacy Policy e Termini di Servizio
+3) Scroll to top automatico ad ogni cambio pagina
+
+════════════════════════════════════════
+FIX 1 — SCROLL TO TOP AD OGNI PAGINA
+════════════════════════════════════════
+
+PROBLEMA:
+Quando navigo da /famiglie ad un'altra pagina
+e torno su /famiglie, la pagina è scrollata
+dove l'avevo lasciata invece di partire dall'inizio.
+
+SOLUZIONE:
+Crea il componente ScrollToTop e aggiungilo
+all'app. Si attiva automaticamente ad ogni
+cambio di route.
+
+Crea src/components/ScrollToTop.jsx:
+
+```jsx
+import { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
+
+export default function ScrollToTop() {
+  const { pathname } = useLocation()
+
+  useEffect(() => {
+    // Ogni volta che cambia la pagina
+    // torna automaticamente in cima
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'instant' // istantaneo come i siti professionali
+    })
+  }, [pathname])
+
+  return null // non renderizza niente
+}
+```
+
+Aggiorna src/App.jsx:
+
+```jsx
+import ScrollToTop from './components/ScrollToTop'
+
+function App() {
+  return (
+    <BrowserRouter>
+      <ScrollToTop /> {/* ← aggiungilo QUI, subito dopo BrowserRouter */}
+      <AuthProvider>
+        <Routes>
+          {/* tutte le tue route */}
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  )
+}
+```
+
+RISULTATO:
+✅ Ogni volta che clicchi un link
+   la nuova pagina parte dall'inizio
+✅ Comportamento identico a tutti
+   i siti professionali (Apple, Airbnb, ecc.)
+✅ Zero configurazione aggiuntiva
+
+════════════════════════════════════════
+FIX 2 — SISTEMA RUOLI UNIFICATO
+════════════════════════════════════════
+
+CONCETTO:
+- Un solo tipo di utente
+- Ogni utente può cercare sitter
+- Ogni utente può DIVENTARE sitter
+- La dashboard si adatta al suo stato
+
+AGGIORNA DATABASE SUPABASE:
+Esegui nel SQL Editor:
+
+```sql
+-- Aggiorna tabella profiles
+-- Rimuovi il campo ruolo fisso
+-- Aggiungi flag sitter opzionale
+
+ALTER TABLE profiles
+  DROP COLUMN IF EXISTS ruolo;
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS is_sitter BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS sitter_status TEXT DEFAULT NULL;
+
+-- sitter_status può essere:
+-- NULL = non ha mai fatto richiesta sitter
+-- 'draft' = wizard in corso
+-- 'submitted' = in attesa verifica KYD
+-- 'verified' = sitter attivo
+-- 'rejected' = non approvato
+-- 'suspended' = sospeso
+
+-- Aggiorna il trigger di creazione profilo
+CREATE OR REPLACE FUNCTION crea_profilo_nuovo_utente()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO profiles (
+    id,
+    email,
+    nome,
+    cognome,
+    is_sitter,
+    sitter_status
+  )
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'nome', 'Utente'),
+    COALESCE(NEW.raw_user_meta_data->>'cognome', ''),
+    FALSE,
+    NULL
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- View aggiornata sitter completo
+DROP VIEW IF EXISTS sitter_completo;
+CREATE VIEW sitter_completo AS
+SELECT
+  sp.*,
+  p.nome,
+  p.cognome,
+  p.nome || ' ' || LEFT(p.cognome, 1) || '.' AS nome_display,
+  p.avatar_url,
+  p.telefono,
+  p.email,
+  p.is_sitter,
+  p.sitter_status
+FROM sitter_profiles sp
+JOIN profiles p ON sp.user_id = p.id
+WHERE p.sitter_status = 'verified';
+```
+
+AGGIORNA src/hooks/useAuth.js:
+
+```javascript
+import { useState, useEffect, createContext, useContext } from 'react'
+import { supabase } from '../lib/supabase'
+
+const AuthContext = createContext({})
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      if (session?.user) {
+        caricaProfilo(session.user.id)
+      } else {
+        setLoading(false)
+      }
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          await caricaProfilo(session.user.id)
+        } else {
+          setProfile(null)
+          setLoading(false)
+        }
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const caricaProfilo = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (error) throw error
+      setProfile(data)
+    } catch (error) {
+      console.error('Errore caricamento profilo:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const registrati = async ({ email, password, nome, cognome }) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { nome, cognome }
+        // NESSUN ruolo fisso — tutti partono uguali
+      }
+    })
+    if (error) throw error
+    return data
+  }
+
+  const accedi = async ({ email, password }) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+    if (error) throw error
+    return data
+  }
+
+  const esci = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setProfile(null)
+  }
+
+  // Helpers ruolo (basati sul nuovo sistema)
+  const isLoggedIn = !!user
+  const isSitterVerified = profile?.sitter_status === 'verified'
+  const isSitterPending = profile?.sitter_status === 'submitted'
+  const isSitterDraft = profile?.sitter_status === 'draft'
+  const hasSitterProfile = profile?.is_sitter === true
+  const isAdmin = profile?.is_admin === true
+
+  // Avvia il percorso "diventa sitter"
+  const avviaWizardSitter = async () => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        is_sitter: true,
+        sitter_status: 'draft'
+      })
+      .eq('id', user.id)
+
+    if (error) throw error
+    await caricaProfilo(user.id)
+  }
+
+  // Dopo che l'utente completa il wizard
+  const submitProfiloSitter = async () => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ sitter_status: 'submitted' })
+      .eq('id', user.id)
+
+    if (error) throw error
+    await caricaProfilo(user.id)
+  }
+
+  return (
+    <AuthContext.Provider value={{
+      user,
+      profile,
+      loading,
+      isLoggedIn,
+      isSitterVerified,
+      isSitterPending,
+      isSitterDraft,
+      hasSitterProfile,
+      isAdmin,
+      registrati,
+      accedi,
+      esci,
+      avviaWizardSitter,
+      submitProfiloSitter,
+      ricaricaProfilo: () => user && caricaProfilo(user.id)
+    }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export const useAuth = () => useContext(AuthContext)
+```
+
+AGGIORNA DASHBOARD (src/pages/Dashboard.jsx):
+
+```jsx
+import { useAuth } from '../hooks/useAuth'
+import { Link } from 'react-router-dom'
+
+export default function Dashboard() {
+  const {
+    profile,
+    isSitterVerified,
+    isSitterPending,
+    hasSitterProfile
+  } = useAuth()
+
+  return (
+    <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '40px 20px' }}>
+
+      {/* Saluto */}
+      <div style={{ marginBottom: '32px' }}>
+        <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#111827' }}>
+          Ciao, {profile?.nome}! 👋
+        </h1>
+        <p style={{ color: '#6B7280', marginTop: '4px' }}>
+          Cosa vuoi fare oggi?
+        </p>
+      </div>
+
+      {/* Due card principali */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: '20px',
+        marginBottom: '40px'
+      }}>
+
+        {/* Card: Cerca un sitter */}
+        <Link to="/ricerca" style={{ textDecoration: 'none' }}>
+          <div style={{
+            backgroundColor: '#EFF6FF',
+            border: '2px solid #DBEAFE',
+            borderRadius: '16px',
+            padding: '28px',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = '#3B82F6'
+            e.currentTarget.style.boxShadow = '0 8px 24px rgba(59,130,246,0.15)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = '#DBEAFE'
+            e.currentTarget.style.boxShadow = 'none'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>🔍</div>
+            <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#1D4ED8', marginBottom: '8px' }}>
+              Cerca un Sitter
+            </h3>
+            <p style={{ color: '#3B82F6', fontSize: '14px', lineHeight: '1.6' }}>
+              Trova babysitter, pet-sitter o badanti
+              verificati nella tua zona
+            </p>
+            <div style={{
+              marginTop: '16px',
+              display: 'inline-block',
+              backgroundColor: '#3B82F6',
+              color: '#fff',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: 600
+            }}>
+              Cerca ora →
+            </div>
+          </div>
+        </Link>
+
+        {/* Card: Diventa Sitter / Il mio profilo sitter */}
+        {!hasSitterProfile ? (
+          // Non ha ancora avviato il percorso sitter
+          <Link to="/diventa-sitter" style={{ textDecoration: 'none' }}>
+            <div style={{
+              backgroundColor: '#ECFDF5',
+              border: '2px solid #D1FAE5',
+              borderRadius: '16px',
+              padding: '28px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = '#10B981'
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(16,185,129,0.15)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#D1FAE5'
+              e.currentTarget.style.boxShadow = 'none'
+            }}>
+              <div style={{ fontSize: '48px', marginBottom: '12px' }}>💼</div>
+              <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#065F46', marginBottom: '8px' }}>
+                Diventa Sitter
+              </h3>
+              <p style={{ color: '#10B981', fontSize: '14px', lineHeight: '1.6' }}>
+                Guadagna con flessibilità aiutando
+                famiglie nella tua zona
+              </p>
+              <div style={{
+                marginTop: '16px',
+                display: 'inline-block',
+                backgroundColor: '#10B981',
+                color: '#fff',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 600
+              }}>
+                Inizia ora →
+              </div>
+            </div>
+          </Link>
+        ) : isSitterPending ? (
+          // Ha inviato la richiesta, in attesa di verifica
+          <div style={{
+            backgroundColor: '#FFFBEB',
+            border: '2px solid #FCD34D',
+            borderRadius: '16px',
+            padding: '28px'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>⏳</div>
+            <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#92400E', marginBottom: '8px' }}>
+              Verifica in corso
+            </h3>
+            <p style={{ color: '#B45309', fontSize: '14px', lineHeight: '1.6' }}>
+              Il team KYD sta verificando
+              il tuo profilo. Entro 24-48 ore
+              riceverai conferma via email.
+            </p>
+            <div style={{
+              marginTop: '16px',
+              display: 'inline-block',
+              backgroundColor: '#F59E0B',
+              color: '#fff',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: 600
+            }}>
+              ⏳ In attesa di verifica
+            </div>
+          </div>
+        ) : isSitterVerified ? (
+          // Sitter attivo
+          <Link to="/dashboard/sitter" style={{ textDecoration: 'none' }}>
+            <div style={{
+              backgroundColor: '#ECFDF5',
+              border: '2px solid #10B981',
+              borderRadius: '16px',
+              padding: '28px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}>
+              <div style={{ fontSize: '48px', marginBottom: '12px' }}>🏅</div>
+              <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#065F46', marginBottom: '8px' }}>
+                Il mio profilo Sitter
+              </h3>
+              <p style={{ color: '#10B981', fontSize: '14px', lineHeight: '1.6' }}>
+                Gestisci le tue prenotazioni,
+                disponibilità e guadagni
+              </p>
+              <div style={{
+                marginTop: '16px',
+                display: 'inline-block',
+                backgroundColor: '#10B981',
+                color: '#fff',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 600
+              }}>
+                Vai alla dashboard →
+              </div>
+            </div>
+          </Link>
+        ) : null}
+      </div>
+
+      {/* Sezioni rapide */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '12px'
+      }}>
+        {[
+          { icon: '💬', label: 'Messaggi', link: '/chat', badge: 3 },
+          { icon: '📅', label: 'Prenotazioni', link: '/prenotazioni' },
+          { icon: '❤️', label: 'Preferiti', link: '/preferiti' },
+          { icon: '⚙️', label: 'Impostazioni', link: '/impostazioni' }
+        ].map(item => (
+          <Link
+            key={item.label}
+            to={item.link}
+            style={{ textDecoration: 'none' }}
+          >
+            <div style={{
+              backgroundColor: '#fff',
+              border: '1px solid #e5e7eb',
+              borderRadius: '12px',
+              padding: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = '#3B82F6'
+              e.currentTarget.style.backgroundColor = '#EFF6FF'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#e5e7eb'
+              e.currentTarget.style.backgroundColor = '#fff'
+            }}>
+              <span style={{ fontSize: '24px' }}>{item.icon}</span>
+              <span style={{ fontWeight: 600, color: '#374151', fontSize: '14px' }}>
+                {item.label}
+              </span>
+              {item.badge && (
+                <span style={{
+                  marginLeft: 'auto',
+                  backgroundColor: '#EF4444',
+                  color: '#fff',
+                  borderRadius: '50%',
+                  width: '20px',
+                  height: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '11px',
+                  fontWeight: 700
+                }}>
+                  {item.badge}
+                </span>
+              )}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+AGGIORNA App.jsx con le nuove route:
+
+```jsx
+import ScrollToTop from './components/ScrollToTop'
+import PrivacyPolicy from './pages/PrivacyPolicy'
+import TerminiServizio from './pages/TerminiServizio'
+import Dashboard from './pages/Dashboard'
+
+function App() {
+  return (
+    <BrowserRouter>
+      <ScrollToTop />
+      <Routes>
+        {/* Route pubbliche */}
+        <Route path="/" element={<Homepage />} />
+        <Route path="/come-funziona" element={<ComeFunziona />} />
+        <Route path="/famiglie" element={<Famiglie />} />
+        <Route path="/caregiver" element={<Caregiver />} />
+        <Route path="/sicurezza" element={<Sicurezza />} />
+        <Route path="/prezzi" element={<Prezzi />} />
+        <Route path="/chi-siamo" element={<ChiSiamo />} />
+        <Route path="/contatti" element={<Contatti />} />
+        <Route path="/ricerca" element={<Ricerca />} />
+        <Route path="/profilo/:id" element={<ProfiloCaregiver />} />
+
+        {/* Pagine legali (NUOVE) */}
+        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/termini-servizio" element={<TerminiServizio />} />
+
+        {/* Route protette */}
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/diventa-sitter" element={<DiventaSitter />} />
+        <Route path="/prenota/:id" element={<Prenota />} />
+
+        {/* 404 */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}
+```
+
+════════════════════════════════════════
+FIX 3 — PAGINA PRIVACY POLICY
+════════════════════════════════════════
+
+Crea src/pages/PrivacyPolicy.jsx:
+
+```jsx
+import { useEffect } from 'react'
+
+export default function PrivacyPolicy() {
+  const sezioni = [
+    {
+      titolo: '1. Chi siamo',
+      contenuto: `KYD S.r.l. (di seguito "KYD", "noi" o "la piattaforma") è una società italiana 
+      con sede in Italia, che gestisce la piattaforma marketplace KYD accessibile tramite 
+      il sito web e l'applicazione mobile. KYD connette utenti che cercano servizi di assistenza 
+      (babysitting, pet-sitting, assistenza anziani) con professionisti verificati (i "Sitter").
+      
+      Titolare del trattamento dei dati: KYD S.r.l.
+      Email privacy: privacy@kyd.it`
+    },
+    {
+      titolo: '2. Dati che raccogliamo',
+      contenuto: `Raccogliamo i seguenti tipi di dati personali:
+      
+      • Dati di registrazione: nome, cognome, email, password (criptata), numero di telefono
+      • Dati del profilo: foto, bio, preferenze, lingua
+      • Dati di localizzazione: città, provincia, coordinate GPS (solo se autorizzato)
+      • Dati di utilizzo: pagine visitate, ricerche effettuate, interazioni con la piattaforma
+      • Dati di comunicazione: messaggi della chat in-app (cifrati)
+      • Dati di pagamento: gestiti da Stripe (non conserviamo dati della carta)
+      • Dati per sitter: documenti di identità, certificato penale, certificazioni, CV
+      • Dati tecnici: indirizzo IP, tipo di browser, sistema operativo, cookie`
+    },
+    {
+      titolo: '3. Come utilizziamo i tuoi dati',
+      contenuto: `Utilizziamo i tuoi dati personali per:
+      
+      • Creare e gestire il tuo account
+      • Fornire i servizi della piattaforma (ricerca, prenotazione, pagamento)
+      • Verificare l'identità dei Sitter (documenti, certificato penale)
+      • Inviare notifiche su prenotazioni e messaggi
+      • Migliorare la piattaforma tramite analisi di utilizzo
+      • Adempiere ad obblighi legali e fiscali
+      • Prevenire frodi e garantire la sicurezza
+      • Inviare comunicazioni di marketing (solo con consenso esplicito)`
+    },
+    {
+      titolo: '4. Base giuridica del trattamento',
+      contenuto: `Il trattamento dei tuoi dati si basa su:
+      
+      • Esecuzione del contratto: per fornire i servizi richiesti
+      • Obbligo legale: per adempiere a normative fiscali e di sicurezza
+      • Legittimo interesse: per migliorare la piattaforma e prevenire frodi
+      • Consenso: per comunicazioni di marketing e cookie non essenziali`
+    },
+    {
+      titolo: '5. Condivisione dei dati',
+      contenuto: `Condividiamo i tuoi dati solo nei seguenti casi:
+      
+      • Con altri utenti: le informazioni del profilo pubblico sono visibili agli utenti registrati
+      • Con Stripe: per processare i pagamenti in modo sicuro
+      • Con Supabase: per l'archiviazione sicura dei dati (server in Europa)
+      • Con autorità competenti: solo se richiesto dalla legge
+      • Non vendiamo mai i tuoi dati a terze parti per scopi commerciali`
+    },
+    {
+      titolo: '6. Conservazione dei dati',
+      contenuto: `Conserviamo i tuoi dati per:
+      
+      • Account attivi: per tutta la durata del rapporto contrattuale
+      • Dopo cancellazione account: 30 giorni (poi eliminazione definitiva)
+      • Dati fiscali e contabili: 10 anni (obbligo di legge)
+      • Messaggi della chat: 12 mesi dalla data del messaggio
+      • Documenti di verifica identità: 5 anni dalla verifica (obbligo antiriciclaggio)
+      
+      Puoi richiedere la cancellazione anticipata dei tuoi dati tramite privacy@kyd.it`
+    },
+    {
+      titolo: '7. I tuoi diritti (GDPR)',
+      contenuto: `In conformità al Regolamento UE 2016/679 (GDPR), hai il diritto di:
+      
+      • Accesso: richiedere una copia di tutti i tuoi dati personali
+      • Rettifica: correggere dati inesatti o incompleti
+      • Cancellazione: richiedere la cancellazione dei tuoi dati ("diritto all'oblio")
+      • Portabilità: ricevere i tuoi dati in formato leggibile da macchina
+      • Opposizione: opporti al trattamento per finalità di marketing
+      • Limitazione: richiedere la limitazione del trattamento in certi casi
+      • Revoca consenso: in qualsiasi momento, senza pregiudicare il trattamento precedente
+      
+      Per esercitare questi diritti: privacy@kyd.it
+      Hai anche il diritto di presentare reclamo al Garante Privacy (www.garanteprivacy.it)`
+    },
+    {
+      titolo: '8. Cookie',
+      contenuto: `Utilizziamo i seguenti tipi di cookie:
+      
+      • Cookie essenziali: necessari per il funzionamento della piattaforma (non disattivabili)
+      • Cookie di sessione: per mantenere l'accesso durante la navigazione
+      • Cookie analitici: per capire come viene utilizzata la piattaforma (con consenso)
+      • Cookie di marketing: per pubblicità pertinente (con consenso esplicito)
+      
+      Puoi gestire le preferenze cookie in qualsiasi momento dal banner cookie
+      o dalle impostazioni del browser.`
+    },
+    {
+      titolo: '9. Sicurezza dei dati',
+      contenuto: `Proteggiamo i tuoi dati con:
+      
+      • Crittografia SSL/TLS per tutte le trasmissioni
+      • Crittografia AES-256 per i dati a riposo
+      • Autenticazione a due fattori (opzionale)
+      • Server in Europa (Frankfurt, Germania)
+      • Accesso ai dati limitato al personale autorizzato
+      • Monitoraggio continuo per rilevare accessi non autorizzati
+      • Audit di sicurezza periodici`
+    },
+    {
+      titolo: '10. Modifiche alla Privacy Policy',
+      contenuto: `Ci riserviamo il diritto di aggiornare questa Privacy Policy.
+      In caso di modifiche significative ti invieremo una notifica via email
+      e mostreremo un banner informativo sulla piattaforma.
+      
+      La data dell'ultima modifica è sempre indicata in fondo a questa pagina.
+      Continuando ad utilizzare KYD dopo le modifiche, accetti la nuova Privacy Policy.`
+    },
+    {
+      titolo: '11. Contatti',
+      contenuto: `Per qualsiasi domanda sulla privacy:
+      
+      Email: privacy@kyd.it
+      Telefono: 800 593 593
+      Indirizzo: Via [Indirizzo], Milano, Italia
+      
+      Data Protection Officer (DPO): dpo@kyd.it`
+    }
+  ]
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#f9fafb',
+      fontFamily: 'Inter, -apple-system, sans-serif'
+    }}>
+
+      {/* Hero */}
+      <div style={{
+        background: 'linear-gradient(135deg, #1D4ED8, #3B82F6)',
+        color: '#fff',
+        padding: '60px 20px',
+        textAlign: 'center'
+      }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
+        <h1 style={{
+          fontSize: '36px',
+          fontWeight: 800,
+          marginBottom: '12px'
+        }}>
+          Privacy Policy
+        </h1>
+        <p style={{
+          fontSize: '18px',
+          opacity: 0.9,
+          maxWidth: '600px',
+          margin: '0 auto'
+        }}>
+          Come KYD raccoglie, utilizza e protegge i tuoi dati personali.
+          La tua privacy è la nostra priorità.
+        </p>
+        <div style={{
+          marginTop: '20px',
+          fontSize: '14px',
+          opacity: 0.75
+        }}>
+          Ultimo aggiornamento: 1 Gennaio 2025 · Versione 2.0
+        </div>
+      </div>
+
+      {/* Contenuto */}
+      <div style={{
+        maxWidth: '800px',
+        margin: '0 auto',
+        padding: '40px 20px'
+      }}>
+
+        {/* Box intro */}
+        <div style={{
+          backgroundColor: '#EFF6FF',
+          border: '1px solid #DBEAFE',
+          borderLeft: '4px solid #3B82F6',
+          borderRadius: '8px',
+          padding: '20px',
+          marginBottom: '40px'
+        }}>
+          <p style={{
+            color: '#1D4ED8',
+            fontSize: '15px',
+            lineHeight: '1.7',
+            margin: 0
+          }}>
+            <strong>In sintesi:</strong> raccogliamo solo i dati necessari per
+            fornire il servizio, non vendiamo mai i tuoi dati a terzi,
+            puoi richiedere la cancellazione in qualsiasi momento e
+            utilizziamo crittografia bancaria per proteggerti.
+          </p>
+        </div>
+
+        {/* Sezioni */}
+        {sezioni.map((sezione, idx) => (
+          <div
+            key={idx}
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              padding: '28px',
+              marginBottom: '16px',
+              border: '1px solid #e5e7eb',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+            }}
+          >
+            <h2 style={{
+              fontSize: '18px',
+              fontWeight: 700,
+              color: '#111827',
+              marginBottom: '12px',
+              paddingBottom: '12px',
+              borderBottom: '1px solid #f3f4f6'
+            }}>
+              {sezione.titolo}
+            </h2>
+            <p style={{
+              color: '#4B5563',
+              lineHeight: '1.8',
+              fontSize: '15px',
+              margin: 0,
+              whiteSpace: 'pre-line'
+            }}>
+              {sezione.contenuto}
+            </p>
+          </div>
+        ))}
+
+        {/* Footer pagina */}
+        <div style={{
+          textAlign: 'center',
+          padding: '32px',
+          color: '#6B7280',
+          fontSize: '14px'
+        }}>
+          <p>
+            Hai domande? Contattaci a{' '}
+            <a
+              href="mailto:privacy@kyd.it"
+              style={{ color: '#3B82F6', textDecoration: 'none' }}
+            >
+              privacy@kyd.it
+            </a>
+          </p>
+          <p style={{ marginTop: '8px' }}>
+            © 2025 KYD S.r.l. — Tutti i diritti riservati
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+════════════════════════════════════════
+FIX 4 — PAGINA TERMINI DI SERVIZIO
+════════════════════════════════════════
+
+Crea src/pages/TerminiServizio.jsx:
+
+```jsx
+export default function TerminiServizio() {
+  const sezioni = [
+    {
+      titolo: '1. Accettazione dei Termini',
+      contenuto: `Utilizzando la piattaforma KYD (sito web e app mobile), dichiari di aver letto,
+      compreso e accettato integralmente questi Termini di Servizio.
+      
+      Se non accetti questi termini, non puoi utilizzare la piattaforma.
+      
+      KYD si riserva il diritto di modificare questi termini in qualsiasi momento.
+      Le modifiche saranno comunicate via email con almeno 30 giorni di preavviso.`
+    },
+    {
+      titolo: '2. Descrizione del Servizio',
+      contenuto: `KYD è una piattaforma marketplace che:
+      
+      • Connette utenti che cercano servizi di assistenza (babysitting, pet-sitting, assistenza anziani)
+        con professionisti verificati ("Sitter")
+      • Fornisce strumenti per la ricerca, prenotazione e pagamento dei servizi
+      • Gestisce un sistema di recensioni e valutazioni
+      • Offre chat in tempo reale tra utenti e Sitter
+      
+      KYD NON è un datore di lavoro dei Sitter. I Sitter sono professionisti indipendenti.
+      KYD agisce come intermediario tecnologico tra le parti.`
+    },
+    {
+      titolo: '3. Registrazione e Account',
+      contenuto: `Per utilizzare KYD devi:
+      
+      • Avere almeno 18 anni
+      • Fornire informazioni accurate e aggiornate durante la registrazione
+      • Mantenere la riservatezza delle credenziali di accesso
+      • Non creare account multipli o fittizi
+      • Notificarci immediatamente in caso di accesso non autorizzato
+      
+      KYD si riserva il diritto di sospendere o cancellare account
+      che violino questi termini, senza preavviso e senza rimborso.`
+    },
+    {
+      titolo: '4. Diventare un Sitter',
+      contenuto: `Per offrire servizi come Sitter su KYD devi:
+      
+      • Essere maggiorenne (18+)
+      • Superare il processo di verifica identità (5 livelli)
+      • Avere un certificato penale pulito
+      • Fornire informazioni accurate sul profilo
+      • Mantenere le certificazioni richieste per il servizio offerto
+      
+      KYD si riserva il diritto di rifiutare o revocare l'approvazione
+      in qualsiasi momento, senza obbligo di motivazione.
+      
+      Il Sitter è un libero professionista. È sua responsabilità
+      gestire la propria posizione fiscale (partita IVA, regime forfettario,
+      prestazione occasionale) in conformità alla legge italiana.`
+    },
+    {
+      titolo: '5. Prenotazioni e Pagamenti',
+      contenuto: `5.1 PRENOTAZIONI
+      • L'utente richiede una prenotazione specificando data, orario e servizio
+      • Il Sitter ha 15 minuti per accettare o rifiutare
+      • La prenotazione è confermata solo dopo l'accettazione del Sitter
+      
+      5.2 PAGAMENTI
+      • I pagamenti sono gestiti tramite Stripe (PCI-DSS Level 1)
+      • Il pagamento viene autorizzato al momento della prenotazione
+      • Il Sitter riceve il pagamento entro 48h dal completamento del servizio
+      
+      5.3 COMMISSIONI KYD
+      • Commissione standard: 12% sul Sitter + 5% sull'utente
+      • Con abbonamento KYD PRO: 8% sul Sitter
+      
+      5.4 CANCELLAZIONI
+      • Fino a 24h prima: rimborso completo all'utente
+      • Entro 24h: rimborso del 50% all'utente
+      • No show del Sitter: rimborso completo + €10 di credito all'utente`
+    },
+    {
+      titolo: '6. Recensioni e Valutazioni',
+      contenuto: `• Le recensioni possono essere lasciate solo dopo una prenotazione completata
+      • Le recensioni devono essere veritiere e non diffamatorie
+      • KYD si riserva il diritto di rimuovere recensioni false o offensive
+      • Non è consentito incentivare recensioni positive in cambio di denaro o sconti
+      • I Sitter possono rispondere pubblicamente alle recensioni`
+    },
+    {
+      titolo: '7. Comportamento Vietato',
+      contenuto: `È vietato:
+      
+      • Fornire informazioni false durante la registrazione o nel profilo
+      • Eludere il sistema di pagamento KYD (accordi diretti fuori piattaforma)
+      • Contattare utenti/Sitter fuori dalla piattaforma per le prime 3 prenotazioni
+      • Pubblicare contenuti offensivi, discriminatori o illegali
+      • Utilizzare la piattaforma per attività illegali
+      • Tentare di accedere ai sistemi informatici di KYD
+      • Creare account falsi o multipli
+      • Copiare o riprodurre contenuti della piattaforma
+      
+      La violazione di questi divieti comporta la sospensione immediata
+      dell'account e potenziali azioni legali.`
+    },
+    {
+      titolo: '8. Responsabilità',
+      contenuto: `8.1 LIMITAZIONE DI RESPONSABILITÀ KYD
+      KYD non è responsabile per:
+      • Il comportamento dei Sitter durante i servizi
+      • Danni causati dai Sitter (coperti dall'assicurazione RC obbligatoria)
+      • Controversie tra utenti e Sitter
+      • Interruzioni del servizio per manutenzione o cause tecniche
+      
+      8.2 ASSICURAZIONE
+      Ogni servizio prenotato tramite KYD include automaticamente
+      una copertura assicurativa RC fino a €50.000 per danni a terzi.
+      
+      8.3 RESPONSABILITÀ DEL SITTER
+      Il Sitter è responsabile della qualità del servizio offerto,
+      della propria posizione fiscale e del rispetto delle leggi applicabili.`
+    },
+    {
+      titolo: '9. Proprietà Intellettuale',
+      contenuto: `Tutti i contenuti della piattaforma KYD (logo, design, testi, codice)
+      sono di proprietà esclusiva di KYD S.r.l. e protetti da copyright.
+      
+      È vietata la riproduzione, distribuzione o modifica dei contenuti
+      senza autorizzazione scritta di KYD.
+      
+      Caricando contenuti sulla piattaforma (foto, testi, video),
+      l'utente concede a KYD una licenza non esclusiva per utilizzarli
+      ai fini del funzionamento del servizio.`
+    },
+    {
+      titolo: '10. Sospensione e Cancellazione',
+      contenuto: `10.1 DA PARTE DELL'UTENTE
+      Puoi cancellare il tuo account in qualsiasi momento dalla sezione
+      Impostazioni > Account > Cancella account.
+      I dati vengono eliminati entro 30 giorni (salvo obblighi di legge).
+      
+      10.2 DA PARTE DI KYD
+      KYD può sospendere o cancellare il tuo account senza preavviso in caso di:
+      • Violazione di questi Termini di Servizio
+      • Comportamento fraudolento o illegale
+      • Non utilizzo per più di 24 mesi
+      • Richiesta delle autorità competenti`
+    },
+    {
+      titolo: '11. Legge Applicabile e Foro Competente',
+      contenuto: `Questi Termini di Servizio sono regolati dalla legge italiana.
+      
+      Per qualsiasi controversia derivante dall'utilizzo di KYD,
+      le parti si impegnano a tentare una risoluzione amichevole.
+      
+      In caso di controversia non risolta, il foro competente
+      esclusivo è il Tribunale di Milano.
+      
+      Per controversie con consumatori si applicano le disposizioni
+      del Codice del Consumo (D.Lgs. 206/2005).`
+    },
+    {
+      titolo: '12. Contatti',
+      contenuto: `Per qualsiasi domanda sui Termini di Servizio:
+      
+      Email: legal@kyd.it
+      Telefono: 800 593 593
+      Indirizzo: Via [Indirizzo], Milano, Italia
+      P.IVA: [Numero P.IVA]`
+    }
+  ]
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#f9fafb',
+      fontFamily: 'Inter, -apple-system, sans-serif'
+    }}>
+
+      {/* Hero */}
+      <div style={{
+        background: 'linear-gradient(135deg, #111827, #374151)',
+        color: '#fff',
+        padding: '60px 20px',
+        textAlign: 'center'
+      }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>📋</div>
+        <h1 style={{
+          fontSize: '36px',
+          fontWeight: 800,
+          marginBottom: '12px'
+        }}>
+          Termini di Servizio
+        </h1>
+        <p style={{
+          fontSize: '18px',
+          opacity: 0.9,
+          maxWidth: '600px',
+          margin: '0 auto'
+        }}>
+          Le regole che governano l'utilizzo della piattaforma KYD.
+          Leggili prima di utilizzare il servizio.
+        </p>
+        <div style={{
+          marginTop: '20px',
+          fontSize: '14px',
+          opacity: 0.75
+        }}>
+          Ultimo aggiornamento: 1 Gennaio 2025 · Versione 2.0
+        </div>
+      </div>
+
+      {/* Contenuto */}
+      <div style={{
+        maxWidth: '800px',
+        margin: '0 auto',
+        padding: '40px 20px'
+      }}>
+
+        {/* Box avviso */}
+        <div style={{
+          backgroundColor: '#FFFBEB',
+          border: '1px solid #FCD34D',
+          borderLeft: '4px solid #F59E0B',
+          borderRadius: '8px',
+          padding: '20px',
+          marginBottom: '40px'
+        }}>
+          <p style={{
+            color: '#92400E',
+            fontSize: '15px',
+            lineHeight: '1.7',
+            margin: 0
+          }}>
+            <strong>⚠️ Importante:</strong> utilizzando KYD accetti automaticamente
+            questi Termini di Servizio. Ti consigliamo di leggerli attentamente.
+            Per domande scrivi a <strong>legal@kyd.it</strong>
+          </p>
+        </div>
+
+        {/* Sezioni */}
+        {sezioni.map((sezione, idx) => (
+          <div
+            key={idx}
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              padding: '28px',
+              marginBottom: '16px',
+              border: '1px solid #e5e7eb',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+            }}
+          >
+            <h2 style={{
+              fontSize: '18px',
+              fontWeight: 700,
+              color: '#111827',
+              marginBottom: '12px',
+              paddingBottom: '12px',
+              borderBottom: '1px solid #f3f4f6'
+            }}>
+              {sezione.titolo}
+            </h2>
+            <p style={{
+              color: '#4B5563',
+              lineHeight: '1.8',
+              fontSize: '15px',
+              margin: 0,
+              whiteSpace: 'pre-line'
+            }}>
+              {sezione.contenuto}
+            </p>
+          </div>
+        ))}
+
+        {/* Footer pagina */}
+        <div style={{
+          textAlign: 'center',
+          padding: '32px',
+          color: '#6B7280',
+          fontSize: '14px'
+        }}>
+          <p>
+            Hai domande legali? Scrivici a{' '}
+            <a
+              href="mailto:legal@kyd.it"
+              style={{ color: '#3B82F6', textDecoration: 'none' }}
+            >
+              legal@kyd.it
+            </a>
+          </p>
+          <p style={{ marginTop: '8px' }}>
+            © 2025 KYD S.r.l. — Tutti i diritti riservati
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+════════════════════════════════════════
+AGGIORNA FOOTER (link corretti)
+════════════════════════════════════════
+
+Assicurati che nel Footer.jsx i link siano:
+
+```jsx
+import { Link } from 'react-router-dom'
+
+// Nella sezione legale del footer:
+<Link to="/privacy-policy">Privacy Policy</Link>
+<Link to="/termini-servizio">Termini di Servizio</Link>
+<Link to="/cookie-policy">Cookie Policy</Link>
+```
+
+USA Link di React Router, NON tag <a href="">
+altrimenti la pagina si ricarica completamente
+e lo scroll to top non funziona correttamente.
+
+════════════════════════════════════════
+OUTPUT RICHIESTO
+════════════════════════════════════════
+
+Crea/aggiorna questi file:
+
+1) src/components/ScrollToTop.jsx (NUOVO)
+2) src/pages/PrivacyPolicy.jsx (NUOVO)
+3) src/pages/TerminiServizio.jsx (NUOVO)
+4) src/App.jsx (aggiungi ScrollToTop + route nuove)
+5) src/hooks/useAuth.js (sistema ruoli unificato)
+6) src/pages/Dashboard.jsx (dashboard unificata)
+7) src/components/Footer.jsx (link con React Router Link)
+
+SQL Supabase:
+8) Esegui le ALTER TABLE per aggiornare profiles
+
+RISULTATO FINALE:
+✅ Ogni pagina parte dall'inizio quando navighi
+✅ /privacy-policy → pagina completa (no 404)
+✅ /termini-servizio → pagina completa (no 404)
+✅ Un solo tipo di utente che può fare tutto
+✅ Dashboard intelligente con card "Cerca" e "Diventa Sitter"
+✅ Sitter in attesa vede lo stato della verifica
+```
+
+---
+
+**3 fix, 1 prompt. Copia e incolla.** 🚀
