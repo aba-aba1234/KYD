@@ -128,7 +128,7 @@ export default function RegisterPage() {
                     </div>
                     <div className="flex-1">
                       <div className="font-bold text-foreground group-hover:text-primary transition-colors">
-                        Sono una Famiglia
+                        Sono un Utente
                       </div>
                       <div className="text-sm text-muted-foreground">
                         Cerco babysitter, pet-sitter o badanti verificati
@@ -195,7 +195,7 @@ export default function RegisterPage() {
                 ) : (
                   <HeartHandshake className="h-3.5 w-3.5" />
                 )}
-                {role === "family" ? "Famiglia" : "Caregiver"}
+                {role === "family" ? "Utente" : "Caregiver"}
               </div>
 
               <div className="space-y-2">

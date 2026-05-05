@@ -291,79 +291,85 @@ export default function SearchPage() {
             const color = SERVICE_HEX[primary] ?? SERVICE_HEX.baby;
             const isHovered = hoveredId === cg.id;
             return (
-              <div key={cg.id}>
-                <Circle
-                  center={[cg.lat, cg.lng]}
-                  radius={(cg.radiusKm ?? 5) * 1000}
-                  pathOptions={{
-                    color,
-                    weight: isHovered ? 2 : 1,
-                    fillColor: color,
-                    fillOpacity: isHovered ? 0.18 : 0.08,
-                  }}
-                />
-                <Marker
-                  position={[cg.lat, cg.lng]}
-                  icon={buildServiceIcon(primary)}
-                  eventHandlers={{
-                    mouseover: () => setHoveredId(cg.id),
-                    mouseout: () => setHoveredId(null),
-                  }}
-                >
-                  <Popup className="kyd-popup">
-                    <div className="p-1 w-64">
-                      <div className="flex justify-between items-start mb-2 gap-2">
-                        <div>
-                          <div className="font-bold text-base leading-tight">{cg.name}</div>
-                          <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                            <MapPin className="h-3 w-3" />
-                            {cg.city} · raggio {cg.radiusKm}km
-                          </div>
+              <Circle
+                key={`circle-${cg.id}`}
+                center={[cg.lat, cg.lng]}
+                radius={(cg.radiusKm ?? 5) * 1000}
+                pathOptions={{
+                  color,
+                  weight: isHovered ? 2 : 1,
+                  fillColor: color,
+                  fillOpacity: isHovered ? 0.18 : 0.08,
+                }}
+              />
+            );
+          })}
+          {list.map((cg) => {
+            const primary = cg.services[0] ?? "baby";
+            const isHovered = hoveredId === cg.id;
+            return (
+              <Marker
+                key={`marker-${cg.id}`}
+                position={[cg.lat, cg.lng]}
+                icon={buildServiceIcon(primary)}
+                eventHandlers={{
+                  mouseover: () => setHoveredId(cg.id),
+                  mouseout: () => setHoveredId(null),
+                }}
+              >
+                <Popup className="kyd-popup">
+                  <div className="p-1 w-64">
+                    <div className="flex justify-between items-start mb-2 gap-2">
+                      <div>
+                        <div className="font-bold text-base leading-tight">{cg.name}</div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <MapPin className="h-3 w-3" />
+                          {cg.city} · raggio {cg.radiusKm}km
                         </div>
-                        <div className="text-right">
-                          <div className="font-bold text-primary text-base">€{cg.pricePerHour}</div>
-                          <div className="text-[10px] text-muted-foreground -mt-1">/ora</div>
-                        </div>
                       </div>
-
-                      <div className="flex items-center gap-1 mb-2">
-                        <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
-                        <span className="text-sm font-semibold">{cg.rating.toFixed(1)}</span>
-                        <span className="text-xs text-muted-foreground">({cg.reviewCount})</span>
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 ml-auto" />
-                      </div>
-
-                      <div className="flex flex-wrap gap-1 mb-3">
-                        {cg.services.map((s) => (
-                          <span
-                            key={s}
-                            className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                            style={{
-                              backgroundColor: `${SERVICE_HEX[s]}1a`,
-                              color: SERVICE_HEX[s],
-                            }}
-                          >
-                            {SERVICE_LABEL[s] ?? s}
-                          </span>
-                        ))}
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Link href={`/profilo/${cg.id}`} className="flex-1">
-                          <Button size="sm" variant="outline" className="w-full h-8 text-xs">
-                            Profilo
-                          </Button>
-                        </Link>
-                        <Link href={`/chat/${cg.id}`} className="flex-1">
-                          <Button size="sm" className="w-full h-8 text-xs">
-                            Chatta
-                          </Button>
-                        </Link>
+                      <div className="text-right">
+                        <div className="font-bold text-primary text-base">€{cg.pricePerHour}</div>
+                        <div className="text-[10px] text-muted-foreground -mt-1">/ora</div>
                       </div>
                     </div>
-                  </Popup>
-                </Marker>
-              </div>
+
+                    <div className="flex items-center gap-1 mb-2">
+                      <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
+                      <span className="text-sm font-semibold">{cg.rating.toFixed(1)}</span>
+                      <span className="text-xs text-muted-foreground">({cg.reviewCount})</span>
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 ml-auto" />
+                    </div>
+
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {cg.services.map((s) => (
+                        <span
+                          key={s}
+                          className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                          style={{
+                            backgroundColor: `${SERVICE_HEX[s]}1a`,
+                            color: SERVICE_HEX[s],
+                          }}
+                        >
+                          {SERVICE_LABEL[s] ?? s}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Link href={`/profilo/${cg.id}`} className="flex-1">
+                        <Button size="sm" variant="outline" className="w-full h-8 text-xs">
+                          Profilo
+                        </Button>
+                      </Link>
+                      <Link href={`/chat/${cg.id}`} className="flex-1">
+                        <Button size="sm" className="w-full h-8 text-xs">
+                          Chatta
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
             );
           })}
         </MapContainer>

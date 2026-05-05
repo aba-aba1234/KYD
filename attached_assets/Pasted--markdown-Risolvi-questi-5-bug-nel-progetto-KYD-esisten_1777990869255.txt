@@ -1,0 +1,1120 @@
+```markdown
+Risolvi questi 5 bug nel progetto KYD esistente.
+Intervieni SOLO sui problemi indicati senza toccare altro.
+
+════════════════════════════════════════
+BUG 1 — "Famiglia" → "Utente" nella pagina Accedi
+════════════════════════════════════════
+
+PROBLEMA:
+Nella pagina login/registrazione appare ancora
+il termine "Famiglia" come tipo utente.
+
+SOLUZIONE:
+Cerca in tutti i file questi termini e sostituiscili:
+
+SOSTITUZIONI DA FARE:
+"Sono una Famiglia" → "Sono un Utente"
+"Profilo Famiglia" → "Il mio Account"
+"Account Famiglia" → "Il mio Account"
+"Utente Famiglia" → "Utente"
+"ruolo: family" → mantieni il valore ma cambia solo il testo mostrato
+"Family" (se mostrato in UI) → "Utente"
+
+FILE DA CONTROLLARE:
+- src/pages/Login.jsx
+- src/pages/Register.jsx
+- src/pages/Dashboard.jsx
+- src/components/Navbar.jsx
+- qualsiasi componente che mostra il ruolo utente
+
+ESEMPIO:
+```jsx
+// ❌ PRIMA
+<div>Sei registrato come: Famiglia</div>
+<option value="family">Sono una Famiglia</option>
+<div>Profilo Famiglia 👨‍👩‍👧</div>
+
+// ✅ DOPO
+<div>Sei registrato come: Utente</div>
+<option value="family">Sono un Utente</option>
+<div>Il mio Account 👤</div>
+```
+
+NELLA PAGINA REGISTRAZIONE:
+Rimuovi completamente la scelta del ruolo
+se ancora presente (non serve più scegliere
+tra famiglia e sitter al momento della registrazione).
+La registrazione è unica per tutti.
+
+```jsx
+// ❌ RIMUOVI questo se esiste:
+<div>
+  <button onClick={() => setRuolo('family')}>Famiglia</button>
+  <button onClick={() => setRuolo('sitter')}>Sitter</button>
+</div>
+
+// ✅ REGISTRAZIONE UNICA SENZA SCELTA RUOLO:
+<form>
+  <input placeholder="Nome" />
+  <input placeholder="Cognome" />
+  <input placeholder="Email" type="email" />
+  <input placeholder="Password" type="password" />
+  <button type="submit">Registrati gratis</button>
+</form>
+```
+
+════════════════════════════════════════
+BUG 2 — Dashboard utente loggato incompleta
+════════════════════════════════════════
+
+PROBLEMA:
+Una volta loggati, la dashboard mostra solo
+"Trova un caregiver" e "Prenotazioni"
+ma manca tutto il resto che dovrebbe vedere
+un utente normale.
+
+SOLUZIONE:
+Sostituisci completamente il contenuto
+della dashboard utente con questo:
+
+```jsx
+// src/pages/Dashboard.jsx
+// Sostituisci il contenuto principale con:
+
+export default function Dashboard() {
+  const { profile, isSitterVerified, isSitterPending, hasSitterProfile } = useAuth()
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#f9fafb',
+      fontFamily: 'Inter, sans-serif'
+    }}>
+
+      {/* Header benvenuto */}
+      <div style={{
+        background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
+        color: '#fff',
+        padding: '32px 20px'
+      }}>
+        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '28px'
+            }}>
+              {profile?.avatar_url
+                ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                : '👤'
+              }
+            </div>
+            <div>
+              <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>
+                Ciao, {profile?.nome || 'Utente'}! 👋
+              </h1>
+              <p style={{ fontSize: '14px', opacity: 0.85, margin: '4px 0 0' }}>
+                Bentornato su KYD
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '32px 20px' }}>
+
+        {/* AZIONI PRINCIPALI */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gap: '16px',
+          marginBottom: '32px'
+        }}>
+
+          {/* Cerca un sitter */}
+          <a href="/ricerca" style={{ textDecoration: 'none' }}>
+            <div style={{
+              backgroundColor: '#fff',
+              border: '2px solid #DBEAFE',
+              borderRadius: '16px',
+              padding: '24px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              height: '100%'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = '#3B82F6'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(59,130,246,0.15)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#DBEAFE'
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔍</div>
+              <h3 style={{ fontWeight: 700, color: '#1D4ED8', marginBottom: '8px', fontSize: '17px' }}>
+                Trova un Sitter
+              </h3>
+              <p style={{ color: '#6B7280', fontSize: '14px', lineHeight: '1.6', margin: 0 }}>
+                Cerca babysitter, pet-sitter o badanti verificati nella tua zona
+              </p>
+            </div>
+          </a>
+
+          {/* Messaggi */}
+          <a href="/chat" style={{ textDecoration: 'none' }}>
+            <div style={{
+              backgroundColor: '#fff',
+              border: '2px solid #D1FAE5',
+              borderRadius: '16px',
+              padding: '24px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = '#10B981'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(16,185,129,0.15)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#D1FAE5'
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>💬</div>
+              <h3 style={{ fontWeight: 700, color: '#065F46', marginBottom: '8px', fontSize: '17px' }}>
+                I miei Messaggi
+              </h3>
+              <p style={{ color: '#6B7280', fontSize: '14px', lineHeight: '1.6', margin: 0 }}>
+                Chatta con i sitter, ricevi risposte e organizza i servizi
+              </p>
+            </div>
+          </a>
+
+          {/* Prenotazioni */}
+          <a href="/prenotazioni" style={{ textDecoration: 'none' }}>
+            <div style={{
+              backgroundColor: '#fff',
+              border: '2px solid #FEF3C7',
+              borderRadius: '16px',
+              padding: '24px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = '#F59E0B'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(245,158,11,0.15)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#FEF3C7'
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>📅</div>
+              <h3 style={{ fontWeight: 700, color: '#92400E', marginBottom: '8px', fontSize: '17px' }}>
+                Le mie Prenotazioni
+              </h3>
+              <p style={{ color: '#6B7280', fontSize: '14px', lineHeight: '1.6', margin: 0 }}>
+                Gestisci prenotazioni passate, future e in corso
+              </p>
+            </div>
+          </a>
+
+          {/* Preferiti */}
+          <a href="/preferiti" style={{ textDecoration: 'none' }}>
+            <div style={{
+              backgroundColor: '#fff',
+              border: '2px solid #FCE7F3',
+              borderRadius: '16px',
+              padding: '24px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = '#EC4899'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(236,72,153,0.15)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#FCE7F3'
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>❤️</div>
+              <h3 style={{ fontWeight: 700, color: '#9D174D', marginBottom: '8px', fontSize: '17px' }}>
+                I miei Preferiti
+              </h3>
+              <p style={{ color: '#6B7280', fontSize: '14px', lineHeight: '1.6', margin: 0 }}>
+                I sitter che hai salvato per prenotarli velocemente
+              </p>
+            </div>
+          </a>
+
+          {/* Recensioni */}
+          <a href="/recensioni" style={{ textDecoration: 'none' }}>
+            <div style={{
+              backgroundColor: '#fff',
+              border: '2px solid #EDE9FE',
+              borderRadius: '16px',
+              padding: '24px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = '#7C3AED'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(124,58,237,0.15)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#EDE9FE'
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>⭐</div>
+              <h3 style={{ fontWeight: 700, color: '#5B21B6', marginBottom: '8px', fontSize: '17px' }}>
+                Le mie Recensioni
+              </h3>
+              <p style={{ color: '#6B7280', fontSize: '14px', lineHeight: '1.6', margin: 0 }}>
+                Vedi e gestisci le recensioni che hai lasciato ai sitter
+              </p>
+            </div>
+          </a>
+
+          {/* Impostazioni */}
+          <a href="/impostazioni" style={{ textDecoration: 'none' }}>
+            <div style={{
+              backgroundColor: '#fff',
+              border: '2px solid #F3F4F6',
+              borderRadius: '16px',
+              padding: '24px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = '#6B7280'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.1)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#F3F4F6'
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>⚙️</div>
+              <h3 style={{ fontWeight: 700, color: '#374151', marginBottom: '8px', fontSize: '17px' }}>
+                Impostazioni
+              </h3>
+              <p style={{ color: '#6B7280', fontSize: '14px', lineHeight: '1.6', margin: 0 }}>
+                Modifica profilo, password e preferenze account
+              </p>
+            </div>
+          </a>
+        </div>
+
+        {/* DIVIDER */}
+        <div style={{
+          borderTop: '1px solid #e5e7eb',
+          margin: '8px 0 32px',
+          position: 'relative'
+        }}>
+          <span style={{
+            position: 'absolute',
+            top: '-12px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: '#f9fafb',
+            padding: '0 16px',
+            color: '#9CA3AF',
+            fontSize: '13px'
+          }}>
+            vuoi anche lavorare come sitter?
+          </span>
+        </div>
+
+        {/* SEZIONE DIVENTA SITTER */}
+        {!hasSitterProfile && (
+          <a href="/diventa-sitter" style={{ textDecoration: 'none' }}>
+            <div style={{
+              backgroundColor: '#fff',
+              border: '2px dashed #10B981',
+              borderRadius: '16px',
+              padding: '28px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '20px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.backgroundColor = '#ECFDF5'
+              e.currentTarget.style.borderStyle = 'solid'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.backgroundColor = '#fff'
+              e.currentTarget.style.borderStyle = 'dashed'
+            }}>
+              <div style={{ fontSize: '48px', flexShrink: 0 }}>💼</div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{
+                  fontWeight: 700,
+                  color: '#065F46',
+                  fontSize: '18px',
+                  marginBottom: '6px'
+                }}>
+                  Diventa anche tu un Sitter su KYD
+                </h3>
+                <p style={{
+                  color: '#6B7280',
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  margin: 0
+                }}>
+                  Guadagna con flessibilità offrendo servizi di babysitting,
+                  pet-sitting o assistenza anziani. Commissione solo 12%.
+                </p>
+              </div>
+              <div style={{
+                backgroundColor: '#10B981',
+                color: '#fff',
+                padding: '10px 20px',
+                borderRadius: '10px',
+                fontWeight: 700,
+                fontSize: '14px',
+                flexShrink: 0,
+                whiteSpace: 'nowrap'
+              }}>
+                Inizia →
+              </div>
+            </div>
+          </a>
+        )}
+
+        {/* Se sitter in attesa */}
+        {isSitterPending && (
+          <div style={{
+            backgroundColor: '#FFFBEB',
+            border: '2px solid #FCD34D',
+            borderRadius: '16px',
+            padding: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px'
+          }}>
+            <div style={{ fontSize: '40px' }}>⏳</div>
+            <div>
+              <h3 style={{ fontWeight: 700, color: '#92400E', marginBottom: '4px' }}>
+                Profilo Sitter in verifica
+              </h3>
+              <p style={{ color: '#B45309', fontSize: '14px', margin: 0 }}>
+                Il team KYD sta verificando il tuo profilo.
+                Riceverai una email entro 24-48 ore.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Se sitter verificato */}
+        {isSitterVerified && (
+          <a href="/dashboard/sitter" style={{ textDecoration: 'none' }}>
+            <div style={{
+              backgroundColor: '#ECFDF5',
+              border: '2px solid #10B981',
+              borderRadius: '16px',
+              padding: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              cursor: 'pointer'
+            }}>
+              <div style={{ fontSize: '40px' }}>🏅</div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ fontWeight: 700, color: '#065F46', marginBottom: '4px' }}>
+                  Sei un Sitter KYD verificato!
+                </h3>
+                <p style={{ color: '#10B981', fontSize: '14px', margin: 0 }}>
+                  Vai alla dashboard sitter per gestire prenotazioni e guadagni
+                </p>
+              </div>
+              <div style={{
+                backgroundColor: '#10B981',
+                color: '#fff',
+                padding: '10px 20px',
+                borderRadius: '10px',
+                fontWeight: 700,
+                fontSize: '14px'
+              }}>
+                Dashboard Sitter →
+              </div>
+            </div>
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+════════════════════════════════════════
+BUG 3 — Rettangolo trasparente in homepage
+════════════════════════════════════════
+
+PROBLEMA:
+Sotto il pulsante "Scopri di più sulla sicurezza"
+appare un rettangolo trasparente/vuoto brutto.
+
+CAUSA PROBABILE:
+Un div vuoto, un componente senza contenuto,
+o un border/outline su un elemento vuoto.
+
+SOLUZIONE:
+Cerca nella sezione "Perché KYD" o "WhyKYD"
+o "Trust section" della homepage il blocco
+del pulsante "Scopri di più sulla sicurezza"
+e controlla cosa c'è subito dopo.
+
+Cerca pattern simili a questi e rimuovili:
+
+```jsx
+// ❌ RIMUOVI div vuoti dopo il button:
+<div className="..."></div>
+<div style={{...}}></div>
+<Box></Box>
+<div /> 
+
+// ❌ RIMUOVI border/outline su elementi vuoti:
+// Se trovi un elemento con border ma senza contenuto → eliminalo
+
+// ❌ RIMUOVI wrapper inutili:
+<div style={{ border: '1px solid transparent', padding: '20px' }}>
+  {/* vuoto */}
+</div>
+```
+
+CONTROLLA ANCHE:
+- La sezione WhyKYD.jsx o simile
+- Il componente FeatureCard.jsx
+- Qualsiasi elemento con min-height che crea spazio vuoto
+
+Aggiungi questo CSS globale temporaneo
+per trovare il problema (poi rimuovilo):
+
+```css
+/* In index.css - SOLO PER DEBUG, rimuovi dopo */
+* {
+  outline: 1px solid red !important;
+}
+```
+
+Questo evidenzia tutti gli elementi e
+ti permette di identificare il rettangolo vuoto.
+Una volta trovato eliminalo o rimuovi il border.
+
+════════════════════════════════════════
+BUG 4 — Recensioni non appaiono in homepage
+════════════════════════════════════════
+
+PROBLEMA:
+La sezione "Cosa dicono le famiglie" non mostra
+nessuna recensione nonostante esistano i dati.
+
+CAUSA PROBABILE (controlla in ordine):
+1) Il componente SocialProof.jsx non ha i dati
+2) Il carousel non è inizializzato correttamente
+3) I dati mockData non vengono importati
+4) Errore silenzioso nel componente
+
+SOLUZIONE:
+
+Apri src/components/sections/SocialProof.jsx
+e assicurati che i dati siano definiti
+DIRETTAMENTE nel componente, NON importati:
+
+```jsx
+// src/components/sections/SocialProof.jsx
+
+// ✅ DEFINISCI I DATI DIRETTAMENTE QUI
+const RECENSIONI = [
+  {
+    id: 1,
+    rating: 5,
+    comment: "Ho trovato Sara in 10 minuti quando la mia babysitter abituale si era ammalata. Mio figlio l'ha adorata e ora la prenoto sempre tramite KYD. Il video di presentazione mi ha fatta sentire subito al sicuro.",
+    author: "Claudia M.",
+    role: "Mamma di Tommaso, 4 anni · Milano",
+    verified: true,
+    avatar: "👩"
+  },
+  {
+    id: 2,
+    rating: 5,
+    comment: "Finalmente posso viaggiare senza sensi di colpa. Il pet-sitter mandava foto di Rocky che giocava ogni giorno. Servizio perfetto, lo consiglio a tutti!",
+    author: "Marco T.",
+    role: "Proprietario di Rocky · Roma",
+    verified: true,
+    avatar: "👨"
+  },
+  {
+    id: 3,
+    rating: 5,
+    comment: "Mia madre ha 82 anni e necessita di compagnia. Ho trovato un'assistente con certificazione OSS. Il sistema di recensioni mi ha aiutato tantissimo nella scelta.",
+    author: "Giulia F.",
+    role: "Figlia di paziente anziana · Torino",
+    verified: true,
+    avatar: "👩"
+  },
+  {
+    id: 4,
+    rating: 5,
+    comment: "Check-in, chat e report in tempo reale. Sai sempre cosa sta succedendo. È un livello di tranquillità che non avevo mai avuto con nessun altro servizio.",
+    author: "Laura P.",
+    role: "Mamma di Emma e Sofia · Firenze",
+    verified: true,
+    avatar: "👩"
+  },
+  {
+    id: 5,
+    rating: 5,
+    comment: "Ho usato Instant Booking last minute. In 15 minuti avevo conferma. Incredibile come funziona tutto così bene.",
+    author: "Davide S.",
+    role: "Proprietario di Milo · Bologna",
+    verified: true,
+    avatar: "👨"
+  }
+]
+
+export default function SocialProof() {
+  const [current, setCurrent] = useState(0)
+
+  // Auto-scroll ogni 5 secondi
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrent(prev => (prev + 1) % RECENSIONI.length)
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [])
+
+  return (
+    <section style={{
+      backgroundColor: '#f8fafc',
+      padding: '80px 20px'
+    }}>
+      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+          <h2 style={{
+            fontSize: '36px',
+            fontWeight: 800,
+            color: '#111827',
+            marginBottom: '12px'
+          }}>
+            Cosa dicono le famiglie
+          </h2>
+          <p style={{ color: '#6B7280', fontSize: '18px' }}>
+            Recensioni reali, lasciate solo dopo una prenotazione completata
+          </p>
+        </div>
+
+        {/* Recensione attiva */}
+        <div style={{
+          backgroundColor: '#fff',
+          borderRadius: '20px',
+          padding: '40px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+          border: '1px solid #e5e7eb',
+          textAlign: 'center',
+          minHeight: '220px'
+        }}>
+          {/* Stelle */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '4px',
+            marginBottom: '20px'
+          }}>
+            {[1,2,3,4,5].map(i => (
+              <span key={i} style={{ fontSize: '24px' }}>⭐</span>
+            ))}
+          </div>
+
+          {/* Commento */}
+          <p style={{
+            fontSize: '18px',
+            color: '#374151',
+            lineHeight: '1.8',
+            fontStyle: 'italic',
+            marginBottom: '24px',
+            maxWidth: '700px',
+            margin: '0 auto 24px'
+          }}>
+            "{RECENSIONI[current].comment}"
+          </p>
+
+          {/* Autore */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px'
+          }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              backgroundColor: '#EFF6FF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '24px'
+            }}>
+              {RECENSIONI[current].avatar}
+            </div>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontWeight: 700, color: '#111827', fontSize: '15px' }}>
+                {RECENSIONI[current].author}
+              </div>
+              <div style={{ color: '#6B7280', fontSize: '13px' }}>
+                {RECENSIONI[current].role}
+              </div>
+            </div>
+            {RECENSIONI[current].verified && (
+              <span style={{
+                backgroundColor: '#ECFDF5',
+                color: '#065F46',
+                padding: '4px 10px',
+                borderRadius: '20px',
+                fontSize: '11px',
+                fontWeight: 700
+              }}>
+                ✅ Verificata
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Dots navigation */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap: '8px',
+          marginTop: '24px'
+        }}>
+          {RECENSIONI.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => setCurrent(idx)}
+              style={{
+                width: idx === current ? '24px' : '8px',
+                height: '8px',
+                borderRadius: '4px',
+                border: 'none',
+                backgroundColor: idx === current ? '#3B82F6' : '#D1D5DB',
+                cursor: 'pointer',
+                transition: 'all 0.3s',
+                padding: 0
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Frecce */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap: '12px',
+          marginTop: '16px'
+        }}>
+          <button
+            onClick={() => setCurrent(prev => prev === 0 ? RECENSIONI.length - 1 : prev - 1)}
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#fff',
+              cursor: 'pointer',
+              fontSize: '18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            ‹
+          </button>
+          <button
+            onClick={() => setCurrent(prev => (prev + 1) % RECENSIONI.length)}
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#fff',
+              cursor: 'pointer',
+              fontSize: '18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            ›
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+```
+
+AGGIUNGI anche l'import di useState e useEffect
+se non presenti:
+```jsx
+import { useState, useEffect } from 'react'
+```
+
+════════════════════════════════════════
+BUG 5 — Ricerca sitter non funziona (lista + mappa)
+════════════════════════════════════════
+
+PROBLEMA:
+Nella pagina /ricerca non appaiono sitter
+né nella lista né sulla mappa.
+
+CAUSA PROBABILE (controlla in ordine):
+1) I dati mockData non vengono trovati/importati
+2) Il filtro è troppo restrittivo (filtra tutto via)
+3) La mappa Leaflet ha problemi di inizializzazione
+4) Il componente fa una fetch a Supabase che fallisce
+
+SOLUZIONE STEP BY STEP:
+
+STEP A — Assicurati che i dati esistano:
+Apri src/data/mockData.js e verifica che
+esista e contenga i caregiver.
+Se non esiste crealo:
+
+```javascript
+// src/data/mockData.js
+export const caregivers = [
+  {
+    id: '1',
+    name: 'Sara M.',
+    city: 'Milano',
+    lat: 45.4642,
+    lng: 9.1900,
+    radius: 10,
+    rating: 4.9,
+    reviewCount: 127,
+    hourlyRate: 15,
+    services: ['baby'],
+    verified: true,
+    available: true,
+    bio: 'Babysitter certificata con 3 anni di esperienza.'
+  },
+  {
+    id: '2',
+    name: 'Luca P.',
+    city: 'Roma',
+    lat: 41.9028,
+    lng: 12.4964,
+    radius: 8,
+    rating: 4.8,
+    reviewCount: 89,
+    hourlyRate: 12,
+    services: ['pet'],
+    verified: true,
+    available: true,
+    bio: 'Dog walker e pet-sitter professionista.'
+  },
+  {
+    id: '3',
+    name: 'Maria G.',
+    city: 'Torino',
+    lat: 45.0703,
+    lng: 7.6869,
+    radius: 12,
+    rating: 5.0,
+    reviewCount: 203,
+    hourlyRate: 18,
+    services: ['elder'],
+    verified: true,
+    available: false,
+    bio: 'OSS certificata, 10 anni di esperienza.'
+  },
+  {
+    id: '4',
+    name: 'Anna R.',
+    city: 'Bologna',
+    lat: 44.4949,
+    lng: 11.3426,
+    radius: 7,
+    rating: 4.9,
+    reviewCount: 56,
+    hourlyRate: 14,
+    services: ['baby', 'pet'],
+    verified: true,
+    available: true,
+    bio: 'Babysitter e pet-sitter con doppia specializzazione.'
+  },
+  {
+    id: '5',
+    name: 'Marco B.',
+    city: 'Firenze',
+    lat: 43.7696,
+    lng: 11.2558,
+    radius: 15,
+    rating: 4.7,
+    reviewCount: 34,
+    hourlyRate: 13,
+    services: ['pet'],
+    verified: true,
+    available: true,
+    bio: 'Amante degli animali, dog walker a Firenze.'
+  },
+  {
+    id: '6',
+    name: 'Elena V.',
+    city: 'Napoli',
+    lat: 40.8518,
+    lng: 14.2681,
+    radius: 6,
+    rating: 4.6,
+    reviewCount: 18,
+    hourlyRate: 11,
+    services: ['baby'],
+    verified: true,
+    available: true,
+    bio: 'Babysitter creativa e paziente.'
+  }
+]
+```
+
+STEP B — Nella pagina Ricerca.jsx
+assicurati di importare e usare i dati:
+
+```jsx
+// src/pages/Ricerca.jsx
+
+import { useState, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { caregivers } from '../data/mockData'
+
+export default function Ricerca() {
+  const [searchParams] = useSearchParams()
+  const [filtri, setFiltri] = useState({
+    citta: searchParams.get('citta') || '',
+    tipo: searchParams.get('tipo') || '',
+    budgetMax: 30
+  })
+
+  // LOGICA FILTRO CORRETTA
+  // Se non ci sono filtri mostra TUTTI
+  const sitterFiltrati = useMemo(() => {
+    return caregivers.filter(sitter => {
+
+      // Filtro città — se vuoto mostra tutti
+      if (filtri.citta && filtri.citta.trim() !== '') {
+        const cittaFiltro = filtri.citta.toLowerCase()
+        const cittaSitter = (sitter.city || '').toLowerCase()
+        // Ricerca parziale (Roma trova anche "Roma Nord")
+        if (!cittaSitter.includes(cittaFiltro)) {
+          return false
+        }
+      }
+
+      // Filtro tipo — se vuoto mostra tutti
+      if (filtri.tipo && filtri.tipo.trim() !== '') {
+        if (!sitter.services || !sitter.services.includes(filtri.tipo)) {
+          return false
+        }
+      }
+
+      // Filtro budget
+      if (sitter.hourlyRate > filtri.budgetMax) {
+        return false
+      }
+
+      return true // passa tutti gli altri filtri
+    })
+  }, [filtri])
+
+  // LOG per debug — rimuovi dopo
+  console.log('Sitter totali:', caregivers.length)
+  console.log('Sitter filtrati:', sitterFiltrati.length)
+  console.log('Filtri attivi:', filtri)
+
+  // ... resto del componente
+}
+```
+
+STEP C — Fix mappa Leaflet:
+
+Se la mappa non mostra i marker, il problema
+è quasi sempre il CSS di Leaflet mancante.
+
+Assicurati che in index.html ci sia:
+```html
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+```
+
+E che il componente mappa usi dynamic import:
+```jsx
+// Se usi Next.js:
+const MappaRicerca = dynamic(() => import('../components/MappaRicerca'), {
+  ssr: false
+})
+
+// Se usi Vite/React normale:
+// Import normale va bene, ma assicurati
+// che il CSS sia caricato
+import 'leaflet/dist/leaflet.css'
+
+// Fix icone Leaflet (problema comune):
+import L from 'leaflet'
+import icon from 'leaflet/dist/images/marker-icon.png'
+import iconShadow from 'leaflet/dist/images/marker-shadow.png'
+
+let DefaultIcon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41]
+})
+
+L.Marker.prototype.options.icon = DefaultIcon
+```
+
+Aggiorna il componente mappa per usare
+i sitter filtrati passati come prop:
+
+```jsx
+// MappaRicerca.jsx
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
+
+export default function MappaRicerca({ sitters }) {
+  // Se non ci sono sitter mostra un messaggio
+  if (!sitters || sitters.length === 0) {
+    return (
+      <div style={{
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f3f4f6',
+        color: '#9CA3AF',
+        flexDirection: 'column',
+        gap: '12px'
+      }}>
+        <div style={{ fontSize: '48px' }}>🗺️</div>
+        <div style={{ fontWeight: 600 }}>Nessun sitter in questa zona</div>
+      </div>
+    )
+  }
+
+  // Centro mappa sul primo sitter
+  const centro = [sitters[0].lat, sitters[0].lng]
+
+  return (
+    <MapContainer
+      center={centro}
+      zoom={6}
+      style={{ height: '100%', width: '100%' }}
+    >
+      <TileLayer
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; OpenStreetMap contributors'
+      />
+      {sitters.map(sitter => (
+        <Marker
+          key={sitter.id}
+          position={[sitter.lat, sitter.lng]}
+        >
+          <Popup>
+            <div style={{ minWidth: '160px' }}>
+              <div style={{ fontWeight: 700, marginBottom: '4px' }}>
+                {sitter.name}
+              </div>
+              <div style={{ fontSize: '13px', color: '#6B7280' }}>
+                ⭐ {sitter.rating} · €{sitter.hourlyRate}/h
+              </div>
+              <div style={{ fontSize: '12px', marginTop: '4px' }}>
+                {sitter.services?.map(s =>
+                  s === 'baby' ? '👶' : s === 'pet' ? '🐾' : '👴'
+                ).join(' ')}
+              </div>
+              <a
+                href={`/profilo/${sitter.id}`}
+                style={{
+                  display: 'block',
+                  marginTop: '8px',
+                  backgroundColor: '#3B82F6',
+                  color: '#fff',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  textAlign: 'center',
+                  textDecoration: 'none',
+                  fontSize: '13px',
+                  fontWeight: 600
+                }}
+              >
+                Vedi profilo
+              </a>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
+    </MapContainer>
+  )
+}
+```
+
+════════════════════════════════════════
+OUTPUT RICHIESTO
+════════════════════════════════════════
+
+Aggiorna questi file:
+
+1) src/pages/Login.jsx + Register.jsx
+   → rimuovi "Famiglia", usa "Utente"
+   → rimuovi scelta ruolo dalla registrazione
+
+2) src/pages/Dashboard.jsx
+   → sostituisci con dashboard completa
+   → 6 card: Cerca, Messaggi, Prenotazioni,
+     Preferiti, Recensioni, Impostazioni
+   → sezione "Diventa Sitter" in fondo
+
+3) src/components/sections/WhyKYD.jsx
+   (o dove si trova il pulsante sicurezza)
+   → rimuovi div vuoto/trasparente
+
+4) src/components/sections/SocialProof.jsx
+   → sostituisci con versione dati inline
+   → carousel semplice con useState
+
+5) src/data/mockData.js
+   → assicurati esistano 6+ caregiver
+
+6) src/pages/Ricerca.jsx
+   → logica filtro corretta (mostra tutti se nessun filtro)
+   → import caregivers da mockData
+
+7) src/components/MappaRicerca.jsx
+   → fix icone Leaflet
+   → fix CSS Leaflet
+   → usa prop sitters invece di dati hardcoded
+
+ZERO 404. ZERO dati mancanti.
+ZERO rettangoli vuoti.
+Tutto funzionante.
+```

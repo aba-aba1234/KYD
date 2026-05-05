@@ -40,6 +40,7 @@ const GUEST_LINKS: NavLink[] = [
 ];
 
 const FAMILY_LINKS: NavLink[] = [
+  { href: "/area-personale", label: "Dashboard", icon: LayoutDashboard },
   { href: "/ricerca", label: "Trova caregiver", icon: Search },
   { href: "/le-mie-prenotazioni", label: "Prenotazioni", icon: Calendar },
 ];
@@ -77,7 +78,7 @@ export function Navbar() {
   const userInitials = user ? getInitials(user.name) : "";
 
   const badge = isFamily
-    ? { label: "Famiglia", className: "bg-primary/10 text-primary", Icon: Users }
+    ? { label: "Utente", className: "bg-primary/10 text-primary", Icon: Users }
     : isCaregiver
     ? {
         label: "Caregiver",
@@ -195,12 +196,20 @@ export function Navbar() {
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {isFamily && (
-                      <Link href="/le-mie-prenotazioni">
-                        <DropdownMenuItem className="gap-2 cursor-pointer">
-                          <Calendar className="h-4 w-4" />
-                          Le mie prenotazioni
-                        </DropdownMenuItem>
-                      </Link>
+                      <>
+                        <Link href="/area-personale">
+                          <DropdownMenuItem className="gap-2 cursor-pointer">
+                            <LayoutDashboard className="h-4 w-4" />
+                            La mia area personale
+                          </DropdownMenuItem>
+                        </Link>
+                        <Link href="/le-mie-prenotazioni">
+                          <DropdownMenuItem className="gap-2 cursor-pointer">
+                            <Calendar className="h-4 w-4" />
+                            Le mie prenotazioni
+                          </DropdownMenuItem>
+                        </Link>
+                      </>
                     )}
                     {isAnyCaregiver && (
                       <>

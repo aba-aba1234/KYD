@@ -24,6 +24,7 @@ import Register from "@/pages/register";
 import MyBookings from "@/pages/my-bookings";
 import ReceivedBookings from "@/pages/received-bookings";
 import CaregiverDashboard from "@/pages/caregiver-dashboard";
+import UserDashboard from "@/pages/user-dashboard";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import TermsOfService from "@/pages/terms-of-service";
 import NotFound from "@/pages/not-found";
@@ -50,6 +51,7 @@ function Router() {
       <Route path="/le-mie-prenotazioni" component={MyBookings} />
       <Route path="/prenotazioni-ricevute" component={ReceivedBookings} />
       <Route path="/dashboard-caregiver" component={CaregiverDashboard} />
+      <Route path="/area-personale" component={UserDashboard} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/termini-di-servizio" component={TermsOfService} />
       <Route component={NotFound} />
