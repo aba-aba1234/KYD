@@ -92,16 +92,69 @@ KYD connette domanda e offerta in meno di **3 minuti**, con verifica identità a
 
 ---
 
-## 🚀 Installazione
-
-### Prerequisiti
-- Node.js 18+
-- npm o pnpm
-- Account Supabase (gratuito)
-- Account Firebase (gratuito, per chat)
-
-### 1. Clona il repository
+## Installazione
 
 ```bash
-git clone https://github.com/[tuo-username]/kyd-marketplace.git
+# 1. Clona il repo
+git clone https://github.com/[username]/kyd-marketplace.git
 cd kyd-marketplace
+
+# 2. Installa dipendenze
+npm install
+
+# 3. Configura variabili ambiente
+cp .env.example .env
+# modifica .env con le tue credenziali
+
+# 4. Avvia in sviluppo
+npm run dev
+```
+## Testare la chat live
+```bash
+1. Apri due browser (o normale + privata)
+
+2. Browser 1 → /chat?user=family
+3. Browser 2 → /chat?user=sitter
+
+4. Scrivi dal Browser 1
+   → appare subito nel Browser 2 ✅
+
+5. Rispondi dal Browser 2
+   → appare subito nel Browser 1 ✅
+   ```
+---
+
+# Roadmap
+
+## v1.0 ✅ Attuale
+
+- Homepage
+- Ricerca
+- Mappa
+- Chat
+- Profili
+- Prenotazioni
+- Dashboard
+
+## v1.1 🔄 Prossima
+
+- Pagamenti Stripe
+- Notifiche push
+- Wizard sitter completo
+
+## v2.0 🚀 Futuro
+
+- App mobile
+- Espansione europea
+- KYD Academy
+- AI matching (CareScore™)
+
+---
+
+**Licenza:** MIT © 2025 KYD S.r.l.
+
+<div align="center">
+Fatto con ❤️ in Italia 🇮🇹
+
+> "Non stiamo costruendo un'app. Stiamo costruendo la FIDUCIA."
+</div>
