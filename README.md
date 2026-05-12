@@ -2,8 +2,6 @@
 
 > La piattaforma italiana che connette famiglie con caregiver verificati per assistenza a bambini, animali domestici e anziani.
 
-![KYD Banner](https://asset-manager--abatimatteo.replit.app/)
-
 ---
 
 ## 📋 Indice
